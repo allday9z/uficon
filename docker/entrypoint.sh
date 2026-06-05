@@ -15,6 +15,7 @@ php artisan config:clear 2>/dev/null || true
 
 # Run DB migrations
 php artisan migrate --force
+php artisan db:seed --class=UserSeeder --force
 
 # Cache for production (config must run after mkdir so realpath resolves correctly)
 php artisan config:cache
