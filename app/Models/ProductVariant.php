@@ -17,27 +17,40 @@ class ProductVariant extends Model
     protected $fillable = [
         'pd_id',
         'pv_title',
+        'pv_caas_title',
         'pv_sku',
+        'pv_mpn',
         'pv_barcode',
+        'pv_handle',
         'price',
         'compare_at_price',
         'pv_option1',
         'pv_option2',
         'pv_option3',
+        'pv_option4',
+        'pv_option5',
+        'pv_option6',
+        'pv_option7',
+        'pv_color_swatch',
+        'pv_band_swatch',
         'pv_weight',
         'requires_shipping',
         'taxable',
         'pv_available',
+        'is_pickup_available',
+        'delivery_lead_time',
+        'pg_id',
         'shopify_variant_id',
     ];
 
     protected $casts = [
-        'price'            => 'decimal:2',
-        'compare_at_price' => 'decimal:2',
-        'pv_weight'        => 'decimal:3',
-        'requires_shipping' => 'boolean',
-        'taxable'          => 'boolean',
-        'pv_available'     => 'boolean',
+        'price'               => 'decimal:2',
+        'compare_at_price'    => 'decimal:2',
+        'pv_weight'           => 'decimal:3',
+        'requires_shipping'   => 'boolean',
+        'taxable'             => 'boolean',
+        'pv_available'        => 'boolean',
+        'is_pickup_available' => 'boolean',
         'created_at'       => 'datetime',
         'updated_at'       => 'datetime',
         'deleted_at'       => 'datetime',
@@ -56,6 +69,11 @@ class ProductVariant extends Model
     public function media(): HasMany
     {
         return $this->hasMany(ProductMedia::class, 'pv_id', 'pv_id');
+    }
+
+    public function gallery(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(ProductGallery::class, 'pg_id', 'pg_id');
     }
 
     public function getTotalStockAttribute(): int

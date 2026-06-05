@@ -17,18 +17,35 @@ class Product extends Model
 
     protected $fillable = [
         'brand_id',
+        'pcol_id',
         'pd_name',
+        'pd_primary_title',
+        'pd_secondary_title',
         'pd_handle',
+        'pd_meta_title',
+        'pd_meta_desc',
+        'pd_meta_image',
+        'pd_lob',
+        'pd_sub_lob',
         'pd_description',
+        'pd_features',
+        'pd_base_name',
         'pd_type',
+        'pd_template_type',
+        'pd_warranty_parts',
+        'pd_warranty_labor',
+        'pd_content_sections',
+        'pd_overview',
         'price',
         'compare_at_price',
         'pd_status',
+        'pd_badge',
         'published_at',
         'shopify_product_id',
     ];
 
     protected $casts = [
+        'pd_content_sections' => 'array',
         'price'              => 'decimal:2',
         'compare_at_price'   => 'decimal:2',
         'published_at'       => 'datetime',
@@ -40,6 +57,16 @@ class Product extends Model
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class, 'brand_id', 'brand_id');
+    }
+
+    public function collection(): BelongsTo
+    {
+        return $this->belongsTo(ProductCollection::class, 'pcol_id', 'pcol_id');
+    }
+
+    public function inbox(): HasMany
+    {
+        return $this->hasMany(ProductInbox::class, 'pd_id', 'pd_id')->orderBy('pib_position');
     }
 
     public function variants(): HasMany
@@ -55,6 +82,13 @@ class Product extends Model
     public function media(): HasMany
     {
         return $this->hasMany(ProductMedia::class, 'pd_id', 'pd_id')->orderBy('pm_position');
+    }
+
+    public function productLevelMedia(): HasMany
+    {
+        return $this->hasMany(ProductMedia::class, 'pd_id', 'pd_id')
+            ->whereNull('pv_id')
+            ->orderBy('pm_position');
     }
 
     public function tags(): HasMany
@@ -74,6 +108,21 @@ class Product extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class, 'pd_id', 'pd_id');
+    }
+
+    public function productRelations(): HasMany
+    {
+        return $this->hasMany(ProductRelation::class, 'pd_id', 'pd_id')->orderBy('pr_position');
+    }
+
+    public function addonMaps(): HasMany
+    {
+        return $this->hasMany(ProductAddonMap::class, 'pd_id', 'pd_id');
+    }
+
+    public function galleries(): HasMany
+    {
+        return $this->hasMany(ProductGallery::class, 'pd_id', 'pd_id')->orderBy('pg_position');
     }
 
     public function scopeActive(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder

@@ -5,22 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ProductOption extends Model
+class ProductInbox extends Model
 {
-    protected $table = 'product_option';
-    protected $primaryKey = 'po_id';
+    protected $table = 'product_inbox';
+    protected $primaryKey = 'pib_id';
+    public $timestamps = false;
 
     protected $fillable = [
         'pd_id',
-        'po_name',
-        'po_display',
-        'po_values',
-        'po_position',
+        'pib_text',
+        'pib_image',
+        'pib_position',
     ];
 
     protected $casts = [
-        'po_position' => 'integer',
-        'po_values'   => 'array',
+        'pib_position' => 'integer',
     ];
 
     public function product(): BelongsTo

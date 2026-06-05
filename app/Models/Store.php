@@ -17,20 +17,23 @@ class Store extends Model
         'st_code',
         'st_phone',
         'st_contact_links',
+        'st_hours',
+        'st_services',
         'google_map_url',
         'images',
         'latitude',
         'longitude',
-        'st_is_active'
+        'st_is_active',
     ];
 
     protected $casts = [
-        'images' => 'array',
-        'st_phone' => 'array',
+        'images'           => 'array',
+        'st_phone'         => 'array',
         'st_contact_links' => 'array',
-        'st_is_active' => 'boolean',
-        'latitude' => 'float',
-        'longitude' => 'float',
+        'st_services'      => 'array',
+        'st_is_active'     => 'boolean',
+        'latitude'         => 'float',
+        'longitude'        => 'float',
     ];
 
     protected $appends = [

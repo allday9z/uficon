@@ -4,11 +4,17 @@ namespace App\Filament\Resources\Products;
 
 use App\Filament\Resources\Products\Pages\CreateProduct;
 use App\Filament\Resources\Products\Pages\EditProduct;
+use App\Filament\Resources\Products\Pages\ImportProductsPage;
 use App\Filament\Resources\Products\Pages\ListProducts;
+use App\Filament\Resources\Products\Pages\ManageProductAddons;
+use App\Filament\Resources\Products\Pages\ManageProductGalleries;
+use App\Filament\Resources\Products\Pages\ManageProductRelations;
+use App\Filament\Resources\Products\Pages\ManageProductVariants;
 use App\Filament\Resources\Products\Schemas\ProductForm;
 use App\Filament\Resources\Products\Tables\ProductsTable;
 use App\Models\Product;
 use BackedEnum;
+use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -39,6 +45,17 @@ class ProductResource extends Resource
         return ProductsTable::configure($table);
     }
 
+    public static function getRecordSubNavigation(Page $page): array
+    {
+        return $page->generateNavigationItems([
+            EditProduct::class,
+            ManageProductVariants::class,
+            ManageProductGalleries::class,
+            ManageProductRelations::class,
+            ManageProductAddons::class,
+        ]);
+    }
+
     public static function getRelations(): array
     {
         return [];
@@ -47,9 +64,14 @@ class ProductResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => ListProducts::route('/'),
-            'create' => CreateProduct::route('/create'),
-            'edit'   => EditProduct::route('/{record}/edit'),
+            'index'    => ListProducts::route('/'),
+            'create'   => CreateProduct::route('/create'),
+            'import'   => ImportProductsPage::route('/import'),
+            'edit'     => EditProduct::route('/{record}/edit'),
+            'variants'   => ManageProductVariants::route('/{record}/variants'),
+            'galleries'  => ManageProductGalleries::route('/{record}/galleries'),
+            'relations'  => ManageProductRelations::route('/{record}/relations'),
+            'addons'     => ManageProductAddons::route('/{record}/addons'),
         ];
     }
 }

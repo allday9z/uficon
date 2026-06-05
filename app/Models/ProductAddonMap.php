@@ -5,26 +5,28 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ProductOption extends Model
+class ProductAddonMap extends Model
 {
-    protected $table = 'product_option';
-    protected $primaryKey = 'po_id';
+    protected $table = 'product_addon_map';
+    protected $primaryKey = 'pam_id';
 
     protected $fillable = [
         'pd_id',
-        'po_name',
-        'po_display',
-        'po_values',
-        'po_position',
+        'addon_pd_id',
+        'is_required',
     ];
 
     protected $casts = [
-        'po_position' => 'integer',
-        'po_values'   => 'array',
+        'is_required' => 'boolean',
     ];
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'pd_id', 'pd_id');
+    }
+
+    public function addonProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'addon_pd_id', 'pd_id');
     }
 }

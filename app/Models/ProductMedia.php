@@ -13,6 +13,7 @@ class ProductMedia extends Model
     protected $fillable = [
         'pd_id',
         'pv_id',
+        'pg_id',
         'pm_src',
         'pm_type',
         'pm_position',
@@ -30,6 +31,15 @@ class ProductMedia extends Model
         'pm_aspect_ratio' => 'decimal:3',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (self $media) {
+            if (empty($media->pd_id) && ! empty($media->pv_id)) {
+                $media->pd_id = ProductVariant::where('pv_id', $media->pv_id)->value('pd_id');
+            }
+        });
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'pd_id', 'pd_id');
@@ -38,6 +48,11 @@ class ProductMedia extends Model
     public function variant(): BelongsTo
     {
         return $this->belongsTo(ProductVariant::class, 'pv_id', 'pv_id');
+    }
+
+    public function gallery(): BelongsTo
+    {
+        return $this->belongsTo(ProductGallery::class, 'pg_id', 'pg_id');
     }
 
     public function isImage(): bool

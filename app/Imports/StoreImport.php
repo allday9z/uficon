@@ -46,6 +46,19 @@ class StoreImport
             $phones = array_map('trim', explode(',', $row['st_phone']));
         }
 
+        $images = [];
+        if (!empty($row['image_url'])) {
+            $images = array_filter(array_map('trim', explode(',', $row['image_url'])));
+        }
+
+        $services = null;
+        if (!empty($row['st_services'])) {
+            $decoded = json_decode($row['st_services'], true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $services = $decoded;
+            }
+        }
+
         Store::updateOrCreate(
             ['st_code' => $row['st_code'] ?? null],
             [
@@ -55,10 +68,13 @@ class StoreImport
                 'st_phone'         => $phones,
                 'st_address'       => $row['st_address'] ?? null,
                 'st_full_address'  => $row['st_full_address'] ?? null,
+                'st_hours'         => $row['st_hours'] ?? null,
+                'st_services'      => $services,
                 'latitude'         => $row['latitude'] ?? null,
                 'longitude'        => $row['longitude'] ?? null,
                 'google_map_url'   => $row['google_map_url'] ?? null,
                 'st_contact_links' => $row['st_contact_links'] ?? null,
+                'images'           => $images ?: null,
             ]
         );
 

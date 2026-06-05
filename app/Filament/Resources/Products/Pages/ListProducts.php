@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Products\Pages;
 
 use App\Filament\Resources\Products\ProductResource;
-use App\Imports\ProductImport;
 use App\Imports\StockImport;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -11,6 +10,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Illuminate\Support\Facades\Artisan;
 
 class ListProducts extends ListRecords
 {
@@ -61,36 +61,7 @@ class ListProducts extends ListRecords
                 ->label('Import Products')
                 ->icon('heroicon-o-cloud-arrow-up')
                 ->color('info')
-                ->form([
-                    Placeholder::make('guide')
-                        ->label('')
-                        ->content('อัปโหลดไฟล์ CSV/Excel สำหรับ import สินค้าและ variants')
-                        ->columnSpanFull(),
-
-                    FileUpload::make('product_file')
-                        ->label('ไฟล์ Products (CSV/XLSX)')
-                        ->acceptedFileTypes(['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
-                        ->required()
-                        ->disk('local')
-                        ->directory('imports/products'),
-                ])
-                ->action(function (array $data): void {
-                    $path = storage_path('app/private/' . $data['product_file']);
-                    $import = new ProductImport();
-                    $import->import($path);
-
-                    $msg = "Import สำเร็จ: สร้าง {$import->created}, อัปเดต {$import->updated} รายการ";
-
-                    if (empty($import->errors)) {
-                        Notification::make()->title($msg)->success()->send();
-                    } else {
-                        Notification::make()
-                            ->title($msg)
-                            ->body(implode("\n", array_slice($import->errors, 0, 5)))
-                            ->warning()
-                            ->send();
-                    }
-                }),
+                ->url(fn () => ProductResource::getUrl('import')),
 
             CreateAction::make()->label('+ เพิ่มสินค้า'),
         ];
