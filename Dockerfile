@@ -1,9 +1,21 @@
-# Stage 1: Node — build Vite assets (Laravel + Filament 5 + Tailwind v4)
+# Stage 1: Composer deps (needed by Vite for vendor/livewire/flux CSS)
+FROM composer:2 AS composer-deps
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction \
+    --no-progress \
+    --no-scripts
+
+# Stage 2: Node — build Vite assets (needs vendor/livewire/flux/dist/flux.css)
 FROM node:20-alpine AS node-builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY . .
+COPY --from=composer-deps /app/vendor ./vendor
 RUN npm run build
 
 # Stage 2: PHP-FPM + nginx (single container for Coolify)
@@ -40,21 +52,13 @@ RUN apk add --no-cache \
         intl \
         opcache
 
-# Composer 2
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
 WORKDIR /var/www/html
-
-# Composer deps (production only)
-COPY composer.json composer.lock ./
-RUN composer install \
-    --no-dev \
-    --optimize-autoloader \
-    --no-interaction \
-    --no-progress
 
 # Application source
 COPY . .
+
+# Reuse vendor from composer-deps stage (already built with --no-dev)
+COPY --from=composer-deps /app/vendor ./vendor
 
 # Vite built assets from Stage 1
 COPY --from=node-builder /app/public/build ./public/build
