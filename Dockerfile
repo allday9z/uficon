@@ -51,7 +51,11 @@ RUN apk add --no-cache \
         gd \
         zip \
         intl \
-        opcache
+        opcache \
+    && apk add --no-cache --virtual .build-deps autoconf g++ make \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .build-deps
 
 WORKDIR /var/www/html
 
