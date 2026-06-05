@@ -7,7 +7,8 @@ RUN composer install \
     --optimize-autoloader \
     --no-interaction \
     --no-progress \
-    --no-scripts
+    --no-scripts \
+    --ignore-platform-reqs
 
 # Stage 2: Node — build Vite assets (needs vendor/livewire/flux/dist/flux.css)
 FROM node:20-alpine AS node-builder
