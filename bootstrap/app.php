@@ -12,6 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
         $middleware->alias([
             'log.api' => \App\Http\Middleware\LogApiActivity::class,
             'auth.api' => \App\Http\Middleware\ApiBearerAuth::class,
