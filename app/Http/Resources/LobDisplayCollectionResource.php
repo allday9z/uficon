@@ -43,6 +43,8 @@ class LobDisplayCollectionResource extends JsonResource
             ? 'เริ่มต้น ฿' . number_format($startingPrice, 0)
             : '';
 
+        $mainHref = $this->ldc_href ?? "/collections/{$this->ldc_slug}";
+
         return [
             // Identity
             'id'          => $this->ldc_slug,
@@ -58,15 +60,20 @@ class LobDisplayCollectionResource extends JsonResource
             'priceLabel'  => $priceLabel,
 
             // Images
-            'imageSrc'    => $heroImage ?? '',
+            // ldc_image_src = LOB row image (product photo on right side)
+            // ldc_hero_image = hero banner (only shown when isFeatured)
+            // falls back to cheapest product's first image
+            'imageSrc'    => $this->ldc_image_src ?? $heroImage ?? '',
             'imageAlt'    => $this->ldc_title ?? $this->ldc_sub_lob,
-            'stripeImage' => $this->ldc_stripe_image ?? $heroImage ?? '',
+            'stripeImage' => $this->ldc_stripe_image ?? $this->ldc_image_src ?? $heroImage ?? '',
+            'heroImage'   => $this->ldc_hero_image ?? '',
 
             // Links
-            'detailHref'     => "/collections/{$this->ldc_slug}",
-            'buyHref'        => "/collections/{$this->ldc_slug}",
-            'heroDetailHref' => $this->ldc_hero_detail_href ?? "/collections/{$this->ldc_slug}",
-            'heroBuyHref'    => $this->ldc_hero_buy_href ?? "/collections/{$this->ldc_slug}",
+            'detailHref'     => $mainHref,
+            'buyHref'        => $mainHref,
+            'buttonLabel'    => $this->ldc_button_label ?? 'สั่งซื้อ',
+            'heroDetailHref' => $this->ldc_hero_detail_href ?? $mainHref,
+            'heroBuyHref'    => $this->ldc_hero_buy_href ?? $mainHref,
 
             // Flags
             'isFeatured'  => (bool) $this->ldc_is_featured,
