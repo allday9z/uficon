@@ -113,16 +113,41 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->modalHeading('Scrape gallery images from istudio.store')
                 ->modalDescription('ดึงรูปจาก istudio.store/{pv_handle}.json → download เก็บ local storage → สร้าง/อัปเดต gallery + media records')
                 ->action(function () {
-                    /** @var \App\Models\Product $product */
-                    $product = $this->getOwnerRecord();
-                    $product->loadMissing('variants');
+                    try {
+                        /** @var \App\Models\Product $product */
+                        $product = $this->getOwnerRecord();
 
-                    $results = $this->scrapeIstudioGalleries($product);
+                        if (! $product) {
+                            Notification::make()->title('Error: product not found')->danger()->send();
+                            return;
+                        }
 
-                    Notification::make()
-                        ->title("Scraped: {$results['galleries']} galleries, {$results['images']} images downloaded")
-                        ->success()
-                        ->send();
+                        $product->loadMissing('variants');
+
+                        if ($product->variants->isEmpty()) {
+                            Notification::make()->title('No variants found — cannot scrape')->warning()->send();
+                            return;
+                        }
+
+                        $results = $this->scrapeIstudioGalleries($product);
+
+                        if ($results['galleries'] === 0) {
+                            Notification::make()
+                                ->title('Scrape complete — 0 galleries found (variants may not have pv_handle or istudio.store returned no images)')
+                                ->warning()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title("Scraped {$results['galleries']} galleries, {$results['images']} images — stored locally")
+                                ->success()
+                                ->send();
+                        }
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title('Scrape failed: ' . $e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
                 }),
         ];
     }
