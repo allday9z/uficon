@@ -44,10 +44,11 @@ class ProductPdpResource extends JsonResource
             'sku'      => $cheapest?->pv_sku,
             'barcode'  => $cheapest?->pv_barcode,
 
-            // Sub-LOB info for FamilyStripe siblings fetch
-            'subLob'     => $this->pd_sub_lob,
-            'subLobSlug' => $this->pd_sub_lob ? \Illuminate\Support\Str::slug($this->pd_sub_lob) : null,
-            'lob'        => $this->pd_lob,
+            // Template + Sub-LOB info for routing + FamilyStripe
+            'templateType' => $this->pd_template_type ?? 'simple', // 'simple'|'full'
+            'subLob'       => $this->pd_sub_lob,
+            'subLobSlug'   => $this->pd_sub_lob ? \Illuminate\Support\Str::slug($this->pd_sub_lob) : null,
+            'lob'          => $this->pd_lob,
 
             'media'    => $this->buildMedia(),
 

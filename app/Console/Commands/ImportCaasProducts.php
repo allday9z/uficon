@@ -611,13 +611,13 @@ class ImportCaasProducts extends Command
 
     private function resolveTemplateType(?string $productType): string
     {
-        if (! $productType) return 'normal';
+        if (! $productType) return 'simple';
         $lower = strtolower($productType);
         $fulldetail = ['mac', 'macbook', 'imac', 'mac pro', 'mac mini', 'mac studio', 'ipad', 'laptop'];
         foreach ($fulldetail as $keyword) {
-            if (str_contains($lower, $keyword)) return 'fulldetail';
+            if (str_contains($lower, $keyword)) return 'full';
         }
-        return 'normal';
+        return 'simple';
     }
 
     private function resolveOptionDisplay(string $optionName): string

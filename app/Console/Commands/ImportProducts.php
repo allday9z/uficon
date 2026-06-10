@@ -591,13 +591,13 @@ class ImportProducts extends Command
 
     private function resolveTemplateType(?string $productType): string
     {
-        if (! $productType) return 'normal';
+        if (! $productType) return 'simple';
         $lower      = strtolower($productType);
         $fulldetail = ['mac', 'macbook', 'imac', 'mac pro', 'mac mini', 'mac studio', 'ipad', 'laptop'];
         foreach ($fulldetail as $kw) {
-            if (str_contains($lower, $kw)) return 'fulldetail';
+            if (str_contains($lower, $kw)) return 'full';
         }
-        return 'normal';
+        return 'simple';
     }
 
     private function resolveOptionDisplay(string $optionName): string
