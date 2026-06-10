@@ -343,8 +343,19 @@ class ImportCaasProducts extends Command
                     ?: $this->cell($firstRow, 'base_name')
                     ?: $this->cell($firstRow, 'title');
 
-        $handle          = Str::slug($productName);
+        // Use pcol_handle (CaaS Base product collection) as pd_handle — guaranteed unique.
+        // Str::slug($primaryTitle) can collide when Thai text strips to the same ASCII
+        // e.g. "iPhone Air" and "กรอบกันกระแทกสำหรับ iPhone Air" both → "iphone-air".
+        $handle          = $collectionHandle ?: Str::slug($productName);
         $existingProduct = Product::withTrashed()->where('pd_handle', $handle)->first();
+        // Also check old slug-based handle to migrate existing data
+        if (! $existingProduct && $collectionHandle) {
+            $existingProduct = Product::withTrashed()->where('pd_handle', Str::slug($productName))->first();
+            if ($existingProduct) {
+                $existingProduct->pd_handle = $handle;
+                $existingProduct->save();
+            }
+        }
         $existed         = (bool) $existingProduct;
 
         $productData = [
