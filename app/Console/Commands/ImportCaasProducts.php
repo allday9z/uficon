@@ -404,14 +404,27 @@ class ImportCaasProducts extends Command
             ->where(fn ($q) => $q->where('pg_slug', '')->orWhereNull('pg_slug'))
             ->delete();
 
-        // Option definitions (from collection option labels)
+        // Option definitions (from collection option labels) + allowed values from variant rows
         $optionLabels = $collection->pcol_option_labels ?? [];
+        // Pre-compute unique values per option position from all variant rows
+        $optionValues = [];
+        foreach ($rows as $row) {
+            foreach ([1,2,3,4,5,6,7] as $i) {
+                $key = "opt{$i}";
+                $val = $this->cell($row, $key);
+                if ($val && isset($optionLabels[$i])) {
+                    $optionValues[$i][$val] = true;
+                }
+            }
+        }
         foreach ($optionLabels as $idx => $label) {
+            $vals = array_keys($optionValues[$idx] ?? []);
             ProductOption::create([
                 'pd_id'       => $product->pd_id,
                 'po_name'     => $label,
                 'po_display'  => $this->resolveOptionDisplay($label),
                 'po_position' => (int) $idx,
+                'po_values'   => !empty($vals) ? $vals : null,
             ]);
         }
 
@@ -624,9 +637,14 @@ class ImportCaasProducts extends Command
     {
         $lower = strtolower(trim($optionName));
         return match (true) {
-            str_contains($lower, 'band color') || $lower === 'band'   => 'band_swatch',
+            // Band color (English + Thai)
+            str_contains($lower, 'band color') || str_contains($lower, 'สีของสาย') || str_contains($lower, 'สีสาย') || $lower === 'band' => 'band_swatch',
+            // Color / finish (English)
             str_contains($lower, 'color') || str_contains($lower, 'finish') || str_contains($lower, 'colour') => 'color_swatch',
-            str_contains($lower, 'processor') || str_contains($lower, 'chip') || str_contains($lower, 'cpu') => 'dropdown',
+            // Thai color terms: สี (standalone or prefix)
+            $lower === 'สี' || str_starts_with($lower, 'สีตัวเรือน') || str_starts_with($lower, 'สีเคส') || str_starts_with($lower, 'case finish') => 'color_swatch',
+            // Processor/chip
+            str_contains($lower, 'processor') || str_contains($lower, 'chip') || str_contains($lower, 'cpu') || str_contains($lower, 'โปรเซสเซอร์') => 'dropdown',
             default => 'button',
         };
     }
