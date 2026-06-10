@@ -221,6 +221,13 @@ class ImportCaasProducts extends Command
             $this->createdCount,
             $this->updatedCount
         ));
+
+        // Verify: no empty-slug galleries remain (Thai slug rule compliance)
+        $emptyCount = ProductGallery::where('pg_slug', '')->orWhereNull('pg_slug')->count();
+        if ($emptyCount > 0) {
+            $this->warn("⚠️  {$emptyCount} galleries ยังมี empty slug — รัน artisan tinker แล้ว cleanup ด้วย Thai slug fallback rule");
+        }
+
         return self::SUCCESS;
     }
 
@@ -375,12 +382,15 @@ class ImportCaasProducts extends Command
         if ($existed) {
             $product->options()->delete();
             $product->inbox()->delete();
-            // Delete ALL media (product-level + gallery-linked) before deleting galleries
-            // product_media.pg_id FK is nullOnDelete — must delete media first
             $product->media()->delete();
-            // Delete galleries (variants.pg_id → NULL via nullOnDelete FK)
             $product->galleries()->delete();
         }
+
+        // Safety: purge any leftover empty-slug galleries for this product
+        // (survived from old imports before Thai slug fix was applied)
+        ProductGallery::where('pd_id', $product->pd_id)
+            ->where(fn ($q) => $q->where('pg_slug', '')->orWhereNull('pg_slug'))
+            ->delete();
 
         // Option definitions (from collection option labels)
         $optionLabels = $collection->pcol_option_labels ?? [];
