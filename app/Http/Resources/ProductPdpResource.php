@@ -122,7 +122,8 @@ class ProductPdpResource extends JsonResource
             ->map(fn ($o) => [
                 'position' => (int) $o->po_position,
                 'name'     => $o->po_name,
-                'display'  => $o->po_display, // color_swatch | band_swatch | button | dropdown
+                'display'  => $o->po_display,
+                'values'   => $o->po_values ?? [], // canonical order from CaaS import
             ])
             ->values()
             ->all();
