@@ -16,7 +16,8 @@ Route::prefix('v1')->group(function () {
         ->middleware(['auth.api', 'secure.payload', 'log.api']);
 
     // Public product APIs — no auth required
-    Route::get('/collections', [ProductCollectionController::class, 'index']);
+    Route::get('/lob/{lob}/collections', [ProductCollectionController::class, 'lobCollections']);
+    Route::get('/collections/{slug}', [ProductCollectionController::class, 'show']);
     Route::get('/collections/{slug}/products', [ProductCollectionController::class, 'products']);
     Route::get('/products/{handle}/pdp', [ProductPdpController::class, 'show']);
 });

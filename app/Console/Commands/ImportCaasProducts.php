@@ -162,9 +162,17 @@ class ImportCaasProducts extends Command
             // ── Step 2: Optionally delete existing products matching these primary titles
             if ($isFresh) {
                 $titles = array_keys($groups);
-                $count = Product::whereIn('pd_primary_title', $titles)->count();
-                Product::whereIn('pd_primary_title', $titles)->forceDelete();
-                $this->warn("--fresh: deleted {$count} existing products matching these primary titles.");
+                // Include soft-deleted records in the count + force-delete both active & trashed
+                $count = Product::withTrashed()->whereIn('pd_primary_title', $titles)->count();
+                Product::withTrashed()->whereIn('pd_primary_title', $titles)->forceDelete();
+                $this->warn("--fresh: force-deleted {$count} existing products (active + trashed).");
+            } else {
+                // Restore any orphaned soft-deleted products that will be re-imported
+                $titles = array_keys($groups);
+                $restored = Product::onlyTrashed()->whereIn('pd_primary_title', $titles)->restore();
+                if ($restored > 0) {
+                    $this->warn("Restored {$restored} soft-deleted products before re-import.");
+                }
             }
 
             // ── Step 3: Import products ──────────────────────────────────
