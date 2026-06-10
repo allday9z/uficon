@@ -60,20 +60,31 @@ class ProductsTable
                         return $total === 0 ? 'danger' : 'success';
                     }),
 
-                TextColumn::make('pd_type')
-                    ->label('Type')
+                TextColumn::make('pd_lob')
+                    ->label('LOB')
                     ->badge()
+                    ->sortable()
                     ->color(fn (?string $state): string => match ($state) {
-                        'Mac'    => 'info',
-                        'iPhone' => 'success',
-                        'iPad'   => 'warning',
-                        default  => 'gray',
+                        'Mac'         => 'info',
+                        'iPhone'      => 'success',
+                        'iPad'        => 'warning',
+                        'Apple Watch' => 'primary',
+                        'AirPods'     => 'danger',
+                        default       => 'gray',
                     }),
+
+                TextColumn::make('pd_sub_lob')
+                    ->label('Sub LOB')
+                    ->sortable()
+                    ->searchable()
+                    ->color('gray')
+                    ->toggleable(isToggledHiddenByDefault: false),
 
                 TextColumn::make('brand.brand_name')
                     ->label('Vendor')
                     ->sortable()
-                    ->color('gray'),
+                    ->color('gray')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('created_at')
                     ->label('สร้างเมื่อ')
@@ -90,21 +101,41 @@ class ProductsTable
                         'inactive' => 'Inactive',
                     ]),
 
-                SelectFilter::make('pd_type')
-                    ->label('Type')
+                SelectFilter::make('pd_lob')
+                    ->label('LOB')
                     ->options([
                         'Mac'         => 'Mac',
                         'iPhone'      => 'iPhone',
                         'iPad'        => 'iPad',
-                        'Watch'       => 'Apple Watch',
+                        'Apple Watch' => 'Apple Watch',
                         'AirPods'     => 'AirPods',
+                        'Apple TV'    => 'Apple TV',
                         'Accessories' => 'Accessories',
+                        'Audio'       => 'Audio',
+                        'HomePod'     => 'HomePod',
                     ]),
+
+                SelectFilter::make('pd_sub_lob')
+                    ->label('Sub LOB')
+                    ->searchable()
+                    ->getSearchResultsUsing(fn (string $search) =>
+                        \App\Models\Product::whereNotNull('pd_sub_lob')
+                            ->where('pd_sub_lob', 'ilike', "%{$search}%")
+                            ->distinct()
+                            ->pluck('pd_sub_lob', 'pd_sub_lob')
+                            ->toArray()
+                    )
+                    ->getOptionLabelUsing(fn ($value) => $value),
 
                 SelectFilter::make('brand_id')
                     ->label('Vendor')
-                    ->relationship('brand', 'brand_name'),
+                    ->relationship('brand', 'brand_name')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->filtersLayout(\Filament\Tables\Enums\FiltersLayout::AboveContent)
+            ->filtersTriggerAction(
+                fn (\Filament\Actions\Action $action) => $action->button()->label('ตัวกรอง')
+            )
             ->recordActions([
                 EditAction::make(),
             ])
