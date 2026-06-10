@@ -8,12 +8,13 @@ use App\Models\Product;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use UnitEnum;
@@ -50,30 +51,40 @@ class LobConfigResource extends Resource
                 ]),
 
             Section::make('Header Banner')
-                ->description('แบนเนอร์ใต้ FamilyStripe — "iPhone ใดที่เหมาะกับคุณ?"')
+                ->description('แบนเนอร์ใต้ FamilyStripe — คลิกเปิด Compare modal')
                 ->columnSpanFull()
-                ->columns(1)
+                ->columns(2)
                 ->schema([
-                    TextInput::make('lc_header_image_desktop')
-                        ->label('Desktop Image URL')
-                        ->maxLength(2000)
-                        ->placeholder('https://cdn.../which-iphone-desktop.webp')
-                        ->helperText('แบนเนอร์บน Desktop'),
+                    FileUpload::make('lc_header_image_desktop')
+                        ->label('Desktop Image')
+                        ->image()
+                        ->disk('public')
+                        ->directory('lob-banners')
+                        ->visibility('public')
+                        ->imagePreviewHeight('120')
+                        ->maxSize(10240)
+                        ->acceptedFileTypes(['image/jpeg','image/png','image/webp','image/gif'])
+                        ->helperText('แบนเนอร์ Desktop (jpg/png/webp, max 10MB)'),
 
-                    TextInput::make('lc_header_image_mobile')
-                        ->label('Mobile Image URL')
-                        ->maxLength(2000)
-                        ->placeholder('https://cdn.../which-iphone-mobile.webp')
-                        ->helperText('แบนเนอร์บน Mobile'),
+                    FileUpload::make('lc_header_image_mobile')
+                        ->label('Mobile Image')
+                        ->image()
+                        ->disk('public')
+                        ->directory('lob-banners')
+                        ->visibility('public')
+                        ->imagePreviewHeight('120')
+                        ->maxSize(10240)
+                        ->acceptedFileTypes(['image/jpeg','image/png','image/webp','image/gif'])
+                        ->helperText('แบนเนอร์ Mobile (แนวตั้ง)'),
 
                     Select::make('lc_banner_action')
                         ->label('เมื่อคลิกแบนเนอร์')
+                        ->columnSpanFull()
                         ->options([
-                            'compare' => 'เปิด Compare Modal (เปรียบเทียบสินค้า)',
+                            'compare' => 'เปิด Compare Modal',
                             'none'    => 'ไม่ทำอะไร',
                         ])
-                        ->default('compare')
-                        ->helperText('compare = เปิด modal เปรียบเทียบสินค้าทุกรุ่นใน LOB นี้'),
+                        ->default('compare'),
                 ]),
         ]);
     }
@@ -87,14 +98,16 @@ class LobConfigResource extends Resource
                     ->badge()
                     ->sortable(),
 
+                ImageColumn::make('lc_header_image_desktop')
+                    ->label('Desktop')
+                    ->disk('public')
+                    ->height(48)
+                    ->defaultImageUrl('https://placehold.co/120x48/f3f4f6/9ca3af?text=—'),
+
                 TextColumn::make('lc_banner_action')
-                    ->label('Banner Action')
+                    ->label('Action')
                     ->badge()
                     ->color(fn ($state) => $state === 'compare' ? 'success' : 'gray'),
-
-                TextColumn::make('lc_header_btn_label')
-                    ->label('Button')
-                    ->placeholder('—'),
             ])
             ->defaultSort('lc_lob')
             ->recordActions([
