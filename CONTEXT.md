@@ -143,6 +143,21 @@ Str::slug($name) ?: 'color-' . substr(md5($name), 0, 8)
 
 **Why critical**: frontend ใช้ `color.id` เพื่อ map → `ProductGallery.pg_slug` สำหรับ gallery image switching บน PDP — ถ้า id ไม่ตรงกับ slug กลไกสลับรูปพัง
 
+### Deterministic Representative Image Rule
+เมื่อระบบต้องการ "ภาพตัวแทน" ของ Product (LOBPage row, SEO OG image, FamilyStripe chip):
+
+**Rule**: ดึงภาพแรกจาก Gallery ของ `defaultColor` เท่านั้น
+```
+defaultColor → ProductGallery (pg_slug = color.id of defaultColor) → media[0]
+```
+
+**ห้าม**: `productLevelMedia()->first()` — non-deterministic, ขึ้นกับ insert order
+
+**`productLevelMedia()` status**: Legacy — กำลัง deprecate
+- เดิม: `whereNull('pv_id')` เพื่อแยก "product-level" vs "variant-level" images
+- หลัง gallery refactor: ทุก image มี `pv_id = NULL` + `pg_id` set → method นี้คืน ALL images แทน
+- Target state (C): ทุก image ต้องผ่าน Gallery เสมอ — ไม่มี "product-level image" ที่ไม่อยู่ใน gallery ใด
+
 ### ProductCollection vs LobDisplayCollection: Source of Truth
 - Navigation & PLP → `LobDisplayCollection` (keyed by `pd_sub_lob`)
 - Merchandising & PDP Configurator → `ProductCollection` (keyed by `pcol_handle`)
