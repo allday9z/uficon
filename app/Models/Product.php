@@ -35,6 +35,7 @@ class Product extends Model
         'pd_warranty_parts',
         'pd_warranty_labor',
         'pd_content_sections',
+        'pdp_content',
         'pd_overview',
         'price',
         'compare_at_price',
@@ -46,6 +47,7 @@ class Product extends Model
 
     protected $casts = [
         'pd_content_sections' => 'array',
+        'pdp_content'        => 'array',
         'price'              => 'decimal:2',
         'compare_at_price'   => 'decimal:2',
         'published_at'       => 'datetime',

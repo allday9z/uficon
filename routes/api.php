@@ -3,6 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Models\Store;
+use App\Http\Controllers\Api\V1\ProductCollectionController;
+use App\Http\Controllers\Api\V1\ProductPdpController;
 use App\Http\Controllers\Api\V1\StoreController;
 
 Route::get('/user', function (Request $request) {
@@ -12,4 +14,9 @@ Route::get('/user', function (Request $request) {
 Route::prefix('v1')->group(function () {
     Route::post('/stores/getAllStore', [StoreController::class, 'getAllStore'])
         ->middleware(['auth.api', 'secure.payload', 'log.api']);
+
+    // Public product APIs — no auth required
+    Route::get('/collections', [ProductCollectionController::class, 'index']);
+    Route::get('/collections/{slug}/products', [ProductCollectionController::class, 'products']);
+    Route::get('/products/{handle}/pdp', [ProductPdpController::class, 'show']);
 });

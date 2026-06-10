@@ -12,6 +12,8 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Builder;
+use Filament\Forms\Components\Builder\Block;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
@@ -703,6 +705,240 @@ class ProductForm
                                     ->placeholder('https://... (1200×630 px for best results)')
                                     ->helperText('Social share image — leave blank to use first product image')
                                     ->columnSpanFull(),
+                            ]),
+
+                        // ── Tab 7: PDP Builder ─────────────────────────────
+                        Tab::make('PDP Builder')
+                            ->schema([
+                                Builder::make('pdp_content')
+                                    ->hiddenLabel()
+                                    ->collapsible()
+                                    ->cloneable(false)
+                                    ->reorderableWithDragAndDrop(false)
+                                    ->columnSpanFull()
+                                    ->blocks([
+
+                                        // ── Block: Page Meta ──────────────
+                                        Block::make('page_meta')
+                                            ->label('Page Settings')
+                                            ->schema([
+                                                Grid::make(3)->schema([
+                                                    TextInput::make('tagline')
+                                                        ->label('Tagline')
+                                                        ->placeholder('Just the way you want it.')
+                                                        ->maxLength(255),
+                                                    TextInput::make('size')
+                                                        ->label('Size label')
+                                                        ->placeholder('14')
+                                                        ->maxLength(50),
+                                                    TextInput::make('currency')
+                                                        ->label('Currency')
+                                                        ->placeholder('THB')
+                                                        ->default('THB')
+                                                        ->maxLength(10),
+                                                ]),
+                                                Grid::make(3)->schema([
+                                                    TextInput::make('monthly_term')
+                                                        ->label('Monthly term (months)')
+                                                        ->numeric()
+                                                        ->default(10)
+                                                        ->minValue(1),
+                                                    TextInput::make('apple_care_price')
+                                                        ->label('AppleCare+ price')
+                                                        ->numeric()
+                                                        ->prefix('฿')
+                                                        ->placeholder('9900'),
+                                                    TextInput::make('default_color')
+                                                        ->label('Default color ID')
+                                                        ->placeholder('space-black')
+                                                        ->maxLength(100),
+                                                ]),
+                                            ]),
+
+                                        // ── Block: Processor Options ──────
+                                        Block::make('configurator_processors')
+                                            ->label('Processor Options')
+                                            ->schema([
+                                                Repeater::make('items')
+                                                    ->hiddenLabel()
+                                                    ->schema([
+                                                        Grid::make(2)->schema([
+                                                            TextInput::make('id')
+                                                                ->label('ID (slug)')
+                                                                ->placeholder('m5-10')
+                                                                ->required()
+                                                                ->maxLength(100),
+                                                            TextInput::make('price_add')
+                                                                ->label('Price add (฿)')
+                                                                ->numeric()
+                                                                ->default(0)
+                                                                ->prefix('฿'),
+                                                        ]),
+                                                        Grid::make(2)->schema([
+                                                            TextInput::make('label')
+                                                                ->label('Label')
+                                                                ->placeholder('MacBook Pro M5')
+                                                                ->required()
+                                                                ->maxLength(255),
+                                                            TextInput::make('sublabel')
+                                                                ->label('Sublabel')
+                                                                ->placeholder('10-core CPU and 10-core GPU')
+                                                                ->maxLength(255),
+                                                        ]),
+                                                    ])
+                                                    ->addActionLabel('+ Add processor')
+                                                    ->defaultItems(0)
+                                                    ->itemLabel(fn (array $state): ?string =>
+                                                        ($state['label'] ?? null)
+                                                            ? "{$state['label']} (+฿" . number_format((int)($state['price_add'] ?? 0)) . ")"
+                                                            : null
+                                                    )
+                                                    ->collapsible()
+                                                    ->reorderableWithDragAndDrop(),
+                                            ]),
+
+                                        // ── Block: Memory Options ─────────
+                                        Block::make('configurator_memory')
+                                            ->label('Memory Options')
+                                            ->schema([
+                                                Repeater::make('items')
+                                                    ->hiddenLabel()
+                                                    ->schema([
+                                                        Grid::make(3)->schema([
+                                                            TextInput::make('id')
+                                                                ->label('ID (slug)')
+                                                                ->placeholder('24gb')
+                                                                ->required()
+                                                                ->maxLength(100),
+                                                            TextInput::make('label')
+                                                                ->label('Label')
+                                                                ->placeholder('24GB')
+                                                                ->required()
+                                                                ->maxLength(100),
+                                                            TextInput::make('price_add')
+                                                                ->label('Price add (฿)')
+                                                                ->numeric()
+                                                                ->default(0)
+                                                                ->prefix('฿'),
+                                                        ]),
+                                                    ])
+                                                    ->addActionLabel('+ Add memory tier')
+                                                    ->defaultItems(0)
+                                                    ->itemLabel(fn (array $state): ?string =>
+                                                        ($state['label'] ?? null)
+                                                            ? "{$state['label']} (+฿" . number_format((int)($state['price_add'] ?? 0)) . ")"
+                                                            : null
+                                                    )
+                                                    ->collapsible()
+                                                    ->reorderableWithDragAndDrop(),
+                                            ]),
+
+                                        // ── Block: Storage Options ────────
+                                        Block::make('configurator_storage')
+                                            ->label('Storage Options')
+                                            ->schema([
+                                                Repeater::make('items')
+                                                    ->hiddenLabel()
+                                                    ->schema([
+                                                        Grid::make(3)->schema([
+                                                            TextInput::make('id')
+                                                                ->label('ID (slug)')
+                                                                ->placeholder('512gb')
+                                                                ->required()
+                                                                ->maxLength(100),
+                                                            TextInput::make('label')
+                                                                ->label('Label')
+                                                                ->placeholder('512GB')
+                                                                ->required()
+                                                                ->maxLength(100),
+                                                            TextInput::make('price_add')
+                                                                ->label('Price add (฿)')
+                                                                ->numeric()
+                                                                ->default(0)
+                                                                ->prefix('฿'),
+                                                        ]),
+                                                    ])
+                                                    ->addActionLabel('+ Add storage tier')
+                                                    ->defaultItems(0)
+                                                    ->itemLabel(fn (array $state): ?string =>
+                                                        ($state['label'] ?? null)
+                                                            ? "{$state['label']} (+฿" . number_format((int)($state['price_add'] ?? 0)) . ")"
+                                                            : null
+                                                    )
+                                                    ->collapsible()
+                                                    ->reorderableWithDragAndDrop(),
+                                            ]),
+
+                                        // ── Block: Tech Specs ─────────────
+                                        Block::make('specs_table')
+                                            ->label('Tech Specs (PDP table)')
+                                            ->schema([
+                                                Repeater::make('items')
+                                                    ->hiddenLabel()
+                                                    ->schema([
+                                                        Grid::make(2)->schema([
+                                                            TextInput::make('label')
+                                                                ->label('Spec label')
+                                                                ->placeholder('จอภาพ')
+                                                                ->required()
+                                                                ->maxLength(255),
+                                                            TextInput::make('value')
+                                                                ->label('Spec value')
+                                                                ->placeholder('14.2 นิ้ว Liquid Retina XDR')
+                                                                ->required()
+                                                                ->maxLength(500),
+                                                        ]),
+                                                    ])
+                                                    ->addActionLabel('+ Add spec row')
+                                                    ->defaultItems(0)
+                                                    ->itemLabel(fn (array $state): ?string => $state['label'] ?? null)
+                                                    ->collapsible()
+                                                    ->reorderableWithDragAndDrop(),
+                                            ]),
+
+                                        // ── Block: Bundle Items ───────────
+                                        Block::make('bundle_items')
+                                            ->label('Bundle Items (Add-ons / Accessories)')
+                                            ->schema([
+                                                Repeater::make('items')
+                                                    ->hiddenLabel()
+                                                    ->schema([
+                                                        Grid::make(2)->schema([
+                                                            TextInput::make('id')
+                                                                ->label('ID (slug)')
+                                                                ->placeholder('magic-mouse-2')
+                                                                ->required()
+                                                                ->maxLength(100),
+                                                            TextInput::make('name')
+                                                                ->label('Display name')
+                                                                ->placeholder('Magic Mouse 2')
+                                                                ->required()
+                                                                ->maxLength(255),
+                                                        ]),
+                                                        Grid::make(2)->schema([
+                                                            TextInput::make('price')
+                                                                ->label('Price (฿)')
+                                                                ->numeric()
+                                                                ->required()
+                                                                ->prefix('฿'),
+                                                            TextInput::make('image_src')
+                                                                ->label('Image URL')
+                                                                ->placeholder('https://...')
+                                                                ->maxLength(1000),
+                                                        ]),
+                                                    ])
+                                                    ->addActionLabel('+ Add bundle item')
+                                                    ->defaultItems(0)
+                                                    ->itemLabel(fn (array $state): ?string =>
+                                                        isset($state['name'], $state['price'])
+                                                            ? "{$state['name']} — ฿" . number_format((int)$state['price'])
+                                                            : null
+                                                    )
+                                                    ->collapsible()
+                                                    ->reorderableWithDragAndDrop(),
+                                            ]),
+
+                                    ]),
                             ]),
 
                     ]),
