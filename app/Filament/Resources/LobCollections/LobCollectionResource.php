@@ -43,6 +43,7 @@ class LobCollectionResource extends Resource
         return $schema->components([
 
             Section::make('ข้อมูล LOB')
+                ->columnSpanFull()
                 ->columns(2)
                 ->schema([
                     Select::make('ldc_lob')
@@ -87,6 +88,7 @@ class LobCollectionResource extends Resource
 
             Section::make('Display — LOB Row')
                 ->description('ข้อมูลที่แสดงในแถว product ของ LOBPage')
+                ->columnSpanFull()
                 ->columns(2)
                 ->schema([
                     Select::make('ldc_badge')
@@ -133,6 +135,7 @@ class LobCollectionResource extends Resource
 
             Section::make('Display — Hero Banner (LOBPage featured)')
                 ->description('แสดงเฉพาะเมื่อ is_featured = true')
+                ->columnSpanFull()
                 ->collapsed()
                 ->columns(2)
                 ->schema([
@@ -156,6 +159,7 @@ class LobCollectionResource extends Resource
                 ]),
 
             Section::make('FamilyStripe Thumbnail')
+                ->columnSpanFull()
                 ->collapsed()
                 ->schema([
                     TextInput::make('ldc_stripe_image')
@@ -167,6 +171,7 @@ class LobCollectionResource extends Resource
                 ]),
 
             Section::make('การแสดงผล')
+                ->columnSpanFull()
                 ->columns(3)
                 ->schema([
                     TextInput::make('ldc_sort_order')
