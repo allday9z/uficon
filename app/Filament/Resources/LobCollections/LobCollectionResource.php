@@ -9,16 +9,19 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use App\Models\Product;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Str;
 use UnitEnum;
 
 class LobCollectionResource extends Resource
@@ -45,32 +48,38 @@ class LobCollectionResource extends Resource
                     Select::make('ldc_lob')
                         ->label('LOB')
                         ->required()
-                        ->options([
-                            'Mac'         => 'Mac',
-                            'iPhone'      => 'iPhone',
-                            'iPad'        => 'iPad',
-                            'Apple Watch' => 'Apple Watch',
-                            'AirPods'     => 'AirPods',
-                            'Apple TV'    => 'Apple TV',
-                            'Accessories' => 'Accessories',
-                            'Audio'       => 'Audio',
-                            'HomePod'     => 'HomePod',
-                        ])
-                        ->searchable(),
+                        ->options(fn () => Product::whereNotNull('pd_lob')
+                            ->distinct()->orderBy('pd_lob')->pluck('pd_lob', 'pd_lob')->toArray()
+                        )
+                        ->searchable()
+                        ->live(),
 
-                    TextInput::make('ldc_sub_lob')
-                        ->label('Sub LOB (ตรงกับ pd_sub_lob)')
-                        ->helperText('e.g. "MacBook Pro" — ต้องตรงกับค่าใน product table')
+                    Select::make('ldc_sub_lob')
+                        ->label('Sub LOB')
                         ->required()
-                        ->maxLength(200),
+                        ->helperText('ต้องตรงกับค่า pd_sub_lob ใน product table')
+                        ->options(fn (Get $get) => Product::whereNotNull('pd_sub_lob')
+                            ->when($get('ldc_lob'), fn ($q, $lob) => $q->where('pd_lob', $lob))
+                            ->distinct()->orderBy('pd_sub_lob')->pluck('pd_sub_lob', 'pd_sub_lob')
+                            ->toArray()
+                        )
+                        ->searchable()
+                        ->live()
+                        ->afterStateUpdated(function ($state, callable $set, Get $get) {
+                            // Auto-fill slug + title when Sub LOB is selected
+                            if ($state) {
+                                $slug = Str::slug($state) ?: 'group-' . substr(md5($state), 0, 8);
+                                $set('ldc_slug', $slug);
+                                $set('ldc_title', $state);
+                            }
+                        }),
 
                     TextInput::make('ldc_slug')
                         ->label('Slug (URL)')
                         ->required()
                         ->unique(ignorable: fn ($record) => $record)
                         ->maxLength(200)
-                        ->helperText('e.g. macbook-pro — ใช้ใน /collections/{slug}')
-                        ->live(onBlur: true),
+                        ->helperText('ใช้ใน /collections/{slug} — auto-fill จาก Sub LOB'),
 
                     TextInput::make('ldc_title')
                         ->label('Title (หัวข้อ LOB row)')
@@ -82,10 +91,16 @@ class LobCollectionResource extends Resource
                 ->description('ข้อมูลที่แสดงในแถว product ของ LOBPage')
                 ->columns(2)
                 ->schema([
-                    TextInput::make('ldc_badge')
+                    Select::make('ldc_badge')
                         ->label('Badge')
-                        ->maxLength(100)
-                        ->placeholder('ใหม่ / Sale'),
+                        ->options([
+                            'ใหม่'      => 'ใหม่',
+                            'Sale'      => 'Sale',
+                            'Pre-Order' => 'Pre-Order',
+                            'In-Store'  => 'In-Store',
+                        ])
+                        ->searchable()
+                        ->placeholder('ไม่มี Badge'),
 
                     TextInput::make('ldc_tagline')
                         ->label('Tagline (บรรทัดแรก)')
@@ -100,11 +115,16 @@ class LobCollectionResource extends Resource
                         ->placeholder('https://cdn.../mac-mini.png')
                         ->helperText('รูปด้านขวาของแถว — ถ้าว่าง ใช้รูปจาก product แรกใน group'),
 
-                    TextInput::make('ldc_button_label')
+                    Select::make('ldc_button_label')
                         ->label('Button Label')
-                        ->maxLength(100)
-                        ->placeholder('สั่งซื้อ')
-                        ->helperText('ค่า default: "สั่งซื้อ" — ใช้ "ดูสินค้า" สำหรับ accessories/custom'),
+                        ->options([
+                            'สั่งซื้อ'  => 'สั่งซื้อ (default)',
+                            'ดูสินค้า'  => 'ดูสินค้า (accessories)',
+                            'เพิ่มเติม' => 'เพิ่มเติม',
+                            'สั่งที่นี่' => 'สั่งที่นี่',
+                        ])
+                        ->placeholder('สั่งซื้อ (default)')
+                        ->helperText('ค่า default: "สั่งซื้อ" — Accessories ควรใช้ "ดูสินค้า"'),
 
                     TextInput::make('ldc_href')
                         ->label('Link Override (URL)')

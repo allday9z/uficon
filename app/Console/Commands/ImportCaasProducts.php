@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Brand;
+use App\Models\LobDisplayCollection;
 use App\Models\Product;
 use App\Models\ProductCollection;
 use App\Models\ProductGallery;
@@ -37,6 +38,20 @@ class ImportCaasProducts extends Command
 
     public int $createdCount = 0;
     public int $updatedCount = 0;
+
+    // LOBs recognised by the system — mapped to their default button label
+    private const KNOWN_LOBS = [
+        'Mac'         => 'สั่งซื้อ',
+        'iPhone'      => 'สั่งซื้อ',
+        'iPad'        => 'สั่งซื้อ',
+        'Apple Watch' => 'สั่งซื้อ',
+        'AirPods'     => 'สั่งซื้อ',
+        'Apple TV'    => 'สั่งซื้อ',
+        'Audio'       => 'สั่งซื้อ',
+        'HomePod'     => 'สั่งซื้อ',
+        // Accessories sub-lobs link to a browse page, not a direct buy
+        'Accessories' => 'ดูสินค้า',
+    ];
 
     // ── Column indices (0-based) ─────────────────────────────────────────
     private const PRODUCTS_COLS = [
@@ -150,6 +165,23 @@ class ImportCaasProducts extends Command
             $this->line("  {$primaryTitle}: {$rows[0][self::PRODUCTS_COLS['lob']]} / {$rows[0][self::PRODUCTS_COLS['sub_lob']]} ({$rows[0][self::PRODUCTS_COLS['product_type']]}) — " . count($rows) . ' variants');
         }
 
+        // ── Validate LOB values ──────────────────────────────────────────
+        $unknownLobs = $this->validateLobs($groups);
+        if (! empty($unknownLobs)) {
+            $this->newLine();
+            $this->warn('⚠️  Unknown LOB values detected — ข้อมูลเหล่านี้ยังไม่ถูก map ใน KNOWN_LOBS:');
+            foreach ($unknownLobs as $lob => $subLobs) {
+                $this->warn("  LOB \"{$lob}\" → sub-LOBs: " . implode(', ', $subLobs));
+            }
+            $this->warn('  → กรุณาเพิ่ม LOB เหล่านี้ใน KNOWN_LOBS ใน ImportCaasProducts.php ก่อน import');
+            $this->warn('  → หรือสร้าง LobDisplayCollection record ด้วยตนเองใน /uf-admin/lob-collections');
+            if (! $this->confirm('  ดำเนิน import ต่อแม้จะมี unknown LOBs ไหม?', true)) {
+                $this->info('Import ยกเลิก');
+                return self::FAILURE;
+            }
+            $this->newLine();
+        }
+
         if ($isDryRun) {
             $this->info('[DRY RUN] Done — no DB writes.');
             return self::SUCCESS;
@@ -179,6 +211,9 @@ class ImportCaasProducts extends Command
             foreach ($groups as $primaryTitle => $rows) {
                 $this->importProductGroup($primaryTitle, $rows);
             }
+
+            // ── Step 4: Auto-sync lob_display_collection ─────────────────
+            $this->syncLobDisplayCollections($groups);
         });
 
         $this->info(sprintf(
@@ -617,6 +652,71 @@ class ImportCaasProducts extends Command
         }
 
         return $html;
+    }
+
+    // ── LOB validation ───────────────────────────────────────────────────
+
+    /**
+     * Returns [lob => [sub_lob, ...]] for any pd_lob not in KNOWN_LOBS.
+     */
+    private function validateLobs(array $groups): array
+    {
+        $unknown = [];
+        foreach ($groups as $rows) {
+            $lob    = $this->cell($rows[0], 'lob') ?? '';
+            $subLob = $this->cell($rows[0], 'sub_lob') ?? '';
+            if ($lob && ! array_key_exists($lob, self::KNOWN_LOBS)) {
+                $unknown[$lob][] = $subLob;
+            }
+        }
+        // Deduplicate sub-lobs per unknown lob
+        return array_map('array_unique', $unknown);
+    }
+
+    /**
+     * Upsert lob_display_collection from imported product groups.
+     * Only CREATES new records — never overwrites existing customisations (title, image, etc.).
+     */
+    private function syncLobDisplayCollections(array $groups): void
+    {
+        $seen = []; // avoid duplicate work within same import
+
+        foreach ($groups as $rows) {
+            $lob    = $this->cell($rows[0], 'lob') ?? '';
+            $subLob = $this->cell($rows[0], 'sub_lob') ?? '';
+
+            if (! $lob || ! $subLob) {
+                continue;
+            }
+
+            $slug = $this->gallerySlug($subLob); // reuse Thai-safe slug method
+            $key  = "{$lob}|{$slug}";
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+
+            $exists = LobDisplayCollection::where('ldc_slug', $slug)->exists();
+            if ($exists) {
+                continue; // preserve existing manual config
+            }
+
+            $buttonLabel = self::KNOWN_LOBS[$lob] ?? 'สั่งซื้อ';
+
+            LobDisplayCollection::create([
+                'ldc_lob'          => $lob,
+                'ldc_sub_lob'      => $subLob,
+                'ldc_slug'         => $slug,
+                'ldc_title'        => $subLob,
+                'ldc_button_label' => $buttonLabel !== 'สั่งซื้อ' ? $buttonLabel : null,
+                'ldc_is_active'    => true,
+                'ldc_is_featured'  => false,
+                'ldc_sort_order'   => 0,
+            ]);
+
+            $this->line("  [lob-sync] created: {$lob} / {$subLob} → {$slug} (btn: {$buttonLabel})");
+        }
     }
 
     /**
