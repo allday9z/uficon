@@ -359,38 +359,6 @@ class ImportCaasProducts extends Command
             }
         }
 
-        // Product images (Product image 1-15, from first row — shared)
-        $position = 1;
-        for ($i = 1; $i <= 15; $i++) {
-            $key = 'img' . $i;
-            $url = $this->cell($firstRow, $key);
-            if ($url) {
-                ProductMedia::create([
-                    'pd_id'       => $product->pd_id,
-                    'pv_id'       => null,
-                    'pm_src'      => $url,
-                    'pm_type'     => 'image',
-                    'pm_position' => $position++,
-                    'pm_alt'      => $productName,
-                ]);
-            }
-        }
-
-        // Product videos (Video asset 1-3, from first row — shared)
-        foreach (['video1', 'video2', 'video3'] as $key) {
-            $url = $this->cell($firstRow, $key);
-            if ($url) {
-                ProductMedia::create([
-                    'pd_id'       => $product->pd_id,
-                    'pv_id'       => null,
-                    'pm_src'      => $url,
-                    'pm_type'     => 'video',
-                    'pm_position' => $position++,
-                    'pm_alt'      => null,
-                ]);
-            }
-        }
-
         // Generate pd_overview HTML from CaaS product-level fields
         $product->pd_overview = $this->buildOverviewHtml(
             $this->cell($firstRow, 'description'),
@@ -401,16 +369,69 @@ class ImportCaasProducts extends Command
         );
         $product->save();
 
-        // Variants (1 per CaaS row)
+        // Variants (1 per CaaS row) — galleries are created here
         foreach ($rows as $row) {
             $this->importVariant($product, $row);
         }
 
+        // Per-color images: take first row of each color → link to that color's gallery
+        $seenColors = [];
+        $totalMedia = 0;
+        foreach ($rows as $row) {
+            $colorName = $this->cell($row, 'opt1');
+            $colorKey  = $colorName ?? '__no_color__';
+
+            if (isset($seenColors[$colorKey])) {
+                continue; // already imported images for this color
+            }
+            $seenColors[$colorKey] = true;
+
+            $gallery = null;
+            if ($colorName) {
+                $slug    = $this->gallerySlug($colorName);
+                $gallery = ProductGallery::where('pd_id', $product->pd_id)
+                    ->where('pg_slug', $slug)
+                    ->first();
+            }
+
+            $position = 1;
+            for ($i = 1; $i <= 15; $i++) {
+                $url = $this->cell($row, 'img' . $i);
+                if ($url) {
+                    ProductMedia::create([
+                        'pd_id'       => $product->pd_id,
+                        'pg_id'       => $gallery?->pg_id,
+                        'pm_src'      => $url,
+                        'pm_type'     => 'image',
+                        'pm_position' => $position++,
+                        'pm_alt'      => $colorName ?? $productName,
+                    ]);
+                    $totalMedia++;
+                }
+            }
+
+            foreach (['video1', 'video2', 'video3'] as $key) {
+                $url = $this->cell($row, $key);
+                if ($url) {
+                    ProductMedia::create([
+                        'pd_id'       => $product->pd_id,
+                        'pg_id'       => $gallery?->pg_id,
+                        'pm_src'      => $url,
+                        'pm_type'     => 'video',
+                        'pm_position' => $position++,
+                        'pm_alt'      => null,
+                    ]);
+                    $totalMedia++;
+                }
+            }
+        }
+
         $this->info(sprintf(
-            '  [product] %s — %d variants, %d media, %d inbox items',
+            '  [product] %s — %d variants, %d colors, %d media, %d inbox items',
             $productName,
             count($rows),
-            $position - 1,
+            count($seenColors),
+            $totalMedia,
             $inboxPosition - 1
         ));
     }
@@ -455,11 +476,11 @@ class ImportCaasProducts extends Command
             'taxable'           => true,
         ];
 
-        // Auto-create gallery keyed by color (opt1) — first color option = gallery name
+        // Auto-create gallery keyed by color (opt1) — one gallery per unique color
         $colorName = $this->cell($row, 'opt1');
         $gallery = null;
         if ($colorName) {
-            $gallerySlug = Str::slug($colorName);
+            $gallerySlug = $this->gallerySlug($colorName);
             $gallery = ProductGallery::firstOrCreate(
                 ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
                 ['pg_name' => $colorName, 'pg_position' => 0]
@@ -584,6 +605,17 @@ class ImportCaasProducts extends Command
         }
 
         return $html;
+    }
+
+    /**
+     * Stable URL-safe slug for a color name.
+     * Str::slug() strips non-ASCII (Thai) entirely → empty string → gallery key collision.
+     * Fallback: hash-based slug so Thai colors each get a unique, stable identifier.
+     */
+    private function gallerySlug(string $colorName): string
+    {
+        $slug = Str::slug($colorName);
+        return $slug !== '' ? $slug : 'color-' . substr(md5($colorName), 0, 8);
     }
 
     private function cell(array $row, string $key): ?string
