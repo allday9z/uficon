@@ -102,6 +102,7 @@ class ImportCaasProducts extends Command
         'video1'          => 44,  // Video asset 1
         'video2'          => 45,  // Video asset 2
         'video3'          => 46,  // Video asset 3
+        'price'           => 47,  // Normal Price (THB)
     ];
 
     private const COLLECTION_COLS = [
@@ -545,6 +546,10 @@ class ImportCaasProducts extends Command
             $variantData['pg_id'] = $gallery->pg_id;
         }
 
+        // Set price from CaaS column 47 "Normal Price" — fallback 0 if absent
+        $priceRaw = $this->cell($row, 'price');
+        $variantData['price'] = $priceRaw !== null ? (float) str_replace(',', '', $priceRaw) : 0;
+
         $variant = ProductVariant::withTrashed()->where('pv_mpn', $mpn)->first();
         if ($variant) {
             if ($variant->trashed()) {
@@ -552,7 +557,6 @@ class ImportCaasProducts extends Command
             }
             $variant->fill($variantData)->save();
         } else {
-            $variantData['price'] = 0;
             $variant = ProductVariant::create(array_merge(['pv_mpn' => $mpn], $variantData));
         }
 
