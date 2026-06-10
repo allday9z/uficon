@@ -181,16 +181,17 @@ class ProductCollectionController extends Controller
     private function normalizeLob(string $lob): string
     {
         return match (strtolower($lob)) {
-            'mac'       => 'Mac',
-            'iphone'    => 'iPhone',
-            'ipad'      => 'iPad',
-            'watch', 'apple-watch' => 'Apple Watch',
-            'airpods'   => 'AirPods',
-            'tv', 'appletv', 'apple-tv' => 'Apple TV',
-            'accessories' => 'Accessories',
-            'audio'     => 'Audio',
-            'homepod'   => 'HomePod',
-            default     => ucfirst($lob),
+            'mac'                              => 'Mac',
+            'iphone'                           => 'iPhone',
+            'ipad'                             => 'iPad',
+            'watch', 'apple-watch'             => 'Apple Watch',
+            'airpods', 'music'                 => 'AirPods',
+            'tv', 'appletv', 'apple-tv',
+            'tv-home', 'tv-and-home'           => 'Apple TV',
+            'accessories'                      => 'Accessories',
+            'audio'                            => 'Audio',
+            'homepod'                          => 'HomePod',
+            default                            => ucfirst($lob),
         };
     }
 }
