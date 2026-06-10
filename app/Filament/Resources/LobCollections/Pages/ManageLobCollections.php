@@ -7,6 +7,7 @@ use App\Models\LobDisplayCollection;
 use App\Models\Product;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Support\Icons\Heroicon;
@@ -61,6 +62,60 @@ class ManageLobCollections extends ManageRecords
 
                     Notification::make()
                         ->title("Sync เสร็จ — สร้าง {$created} records จาก {$groups->count()} กลุ่ม")
+                        ->success()
+                        ->send();
+                }),
+
+            Action::make('sort_by')
+                ->label('จัดเรียง')
+                ->icon(Heroicon::AdjustmentsHorizontal)
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('จัดเรียง LOB Collections')
+                ->modalDescription('เลือกเกณฑ์การเรียง — ระบบจะอัปเดต Sort Order ให้อัตโนมัติ (กรองตาม LOB ที่เลือกก่อน แล้วเรียงทั้งกลุ่ม)')
+                ->schema([
+                    \Filament\Forms\Components\Select::make('lob_filter')
+                        ->label('กรองเฉพาะ LOB (ถ้าต้องการ)')
+                        ->options(fn () => LobDisplayCollection::whereNotNull('ldc_lob')
+                            ->distinct()->orderBy('ldc_lob')->pluck('ldc_lob', 'ldc_lob')->toArray()
+                        )
+                        ->placeholder('ทุก LOB')
+                        ->searchable(),
+
+                    \Filament\Forms\Components\Select::make('sort_mode')
+                        ->label('เรียงตาม')
+                        ->required()
+                        ->options([
+                            'sale_date_desc' => 'ใหม่ → เก่า (วันวางขาย)',
+                            'sale_date_asc'  => 'เก่า → ใหม่ (วันวางขาย)',
+                            'name_asc'       => 'A → Z (ชื่อ)',
+                            'name_desc'      => 'Z → A (ชื่อ)',
+                        ])
+                        ->default('sale_date_desc'),
+                ])
+                ->action(function (array $data) {
+                    $lobFilter = $data['lob_filter'] ?? null;
+                    $mode      = $data['sort_mode'] ?? 'sale_date_desc';
+
+                    $query = LobDisplayCollection::query();
+                    if ($lobFilter) {
+                        $query->where('ldc_lob', $lobFilter);
+                    }
+
+                    $records = match ($mode) {
+                        'sale_date_desc' => $query->orderByRaw('ldc_sale_date DESC NULLS LAST')->orderBy('ldc_title')->get(),
+                        'sale_date_asc'  => $query->orderByRaw('ldc_sale_date ASC NULLS LAST')->orderBy('ldc_title')->get(),
+                        'name_asc'       => $query->orderBy('ldc_title')->get(),
+                        'name_desc'      => $query->orderByDesc('ldc_title')->get(),
+                        default          => $query->get(),
+                    };
+
+                    $records->each(function ($rec, $idx) {
+                        $rec->update(['ldc_sort_order' => $idx]);
+                    });
+
+                    Notification::make()
+                        ->title("จัดเรียง {$records->count()} records เสร็จแล้ว")
                         ->success()
                         ->send();
                 }),

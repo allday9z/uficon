@@ -10,6 +10,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -22,6 +23,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
 use UnitEnum;
@@ -174,13 +176,19 @@ class LobCollectionResource extends Resource
 
             Section::make('การแสดงผล')
                 ->columnSpanFull()
-                ->columns(3)
+                ->columns(4)
                 ->schema([
                     TextInput::make('ldc_sort_order')
                         ->label('Sort Order')
                         ->numeric()
                         ->default(0)
                         ->helperText('น้อย = แสดงก่อน'),
+
+                    DatePicker::make('ldc_sale_date')
+                        ->label('วันที่วางขาย')
+                        ->helperText('ใช้สำหรับเรียงลำดับ ใหม่→เก่า')
+                        ->displayFormat('d/m/Y')
+                        ->native(false),
 
                     Toggle::make('ldc_is_featured')
                         ->label('Featured Hero')
@@ -237,8 +245,16 @@ class LobCollectionResource extends Resource
                 TextColumn::make('ldc_sort_order')
                     ->label('#')
                     ->sortable(),
+
+                TextColumn::make('ldc_sale_date')
+                    ->label('วันวางขาย')
+                    ->date('d/m/Y')
+                    ->sortable()
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: false),
             ])
-            ->defaultSort('ldc_lob')
+            ->defaultSort('ldc_sort_order')
+            ->reorderable('ldc_sort_order')
             ->filters([
                 SelectFilter::make('ldc_lob')
                     ->label('LOB')
@@ -246,6 +262,18 @@ class LobCollectionResource extends Resource
                         ->distinct()->orderBy('ldc_lob')->pluck('ldc_lob', 'ldc_lob')->toArray()
                     )
                     ->searchable(),
+
+                TernaryFilter::make('ldc_is_active')
+                    ->label('Active')
+                    ->placeholder('ทั้งหมด')
+                    ->trueLabel('Active เท่านั้น')
+                    ->falseLabel('Inactive เท่านั้น'),
+
+                TernaryFilter::make('ldc_is_featured')
+                    ->label('Featured')
+                    ->placeholder('ทั้งหมด')
+                    ->trueLabel('Featured เท่านั้น')
+                    ->falseLabel('ไม่ featured'),
             ])
             ->recordActions([
                 EditAction::make(),

@@ -26,6 +26,7 @@ class LobDisplayCollection extends Model
         'ldc_href',
         'ldc_stripe_image',
         'ldc_sort_order',
+        'ldc_sale_date',
         'ldc_is_featured',
         'ldc_is_active',
     ];
@@ -34,6 +35,7 @@ class LobDisplayCollection extends Model
         'ldc_is_featured' => 'boolean',
         'ldc_is_active'   => 'boolean',
         'ldc_sort_order'  => 'integer',
+        'ldc_sale_date'   => 'date',
     ];
 
     /** All active products belonging to this display group. */

@@ -718,12 +718,19 @@ class ImportCaasProducts extends Command
 
             $buttonLabel = self::KNOWN_LOBS[$lob] ?? 'สั่งซื้อ';
 
+            // Pull sale_date from the earliest published_at in this sub_lob group
+            $saleDate = Product::where('pd_lob', $lob)
+                ->where('pd_sub_lob', $subLob)
+                ->whereNotNull('published_at')
+                ->min('published_at');
+
             LobDisplayCollection::create([
                 'ldc_lob'          => $lob,
                 'ldc_sub_lob'      => $subLob,
                 'ldc_slug'         => $slug,
                 'ldc_title'        => $subLob,
                 'ldc_button_label' => $buttonLabel !== 'สั่งซื้อ' ? $buttonLabel : null,
+                'ldc_sale_date'    => $saleDate ? \Illuminate\Support\Carbon::parse($saleDate)->toDateString() : null,
                 'ldc_is_active'    => true,
                 'ldc_is_featured'  => false,
                 'ldc_sort_order'   => 0,
