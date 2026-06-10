@@ -77,7 +77,31 @@ class ProductPdpResource extends JsonResource
             'warrantyDetails' => $this->buildWarrantyDetails(),
 
             'contentSections' => $this->pd_content_sections ?? [],
+
+            // Variant lookup table — used by frontend to resolve color+storage → pv_handle
+            // Each entry: { handle, colorId, color, storage, option2, price, galleryId }
+            'variantMap' => $this->buildVariantMap(),
         ];
+    }
+
+    private function buildVariantMap(): array
+    {
+        return $this->variants
+            ->where('pv_available', true)
+            ->sortBy('price')
+            ->map(fn ($v) => [
+                'handle'   => $v->pv_handle,
+                'colorId'  => $v->pv_option1
+                    ? (Str::slug($v->pv_option1) ?: 'color-' . substr(md5($v->pv_option1), 0, 8))
+                    : null,
+                'color'    => $v->pv_option1,
+                'storage'  => $v->pv_option3,
+                'option2'  => $v->pv_option2,
+                'price'    => (float) ($v->price ?? 0),
+                'galleryId' => $v->pg_id,
+            ])
+            ->values()
+            ->all();
     }
 
     // ── Private helpers ────────────────────────────────────────────────────
