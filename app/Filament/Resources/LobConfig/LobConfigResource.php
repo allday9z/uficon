@@ -52,39 +52,28 @@ class LobConfigResource extends Resource
             Section::make('Header Banner')
                 ->description('แบนเนอร์ใต้ FamilyStripe — "iPhone ใดที่เหมาะกับคุณ?"')
                 ->columnSpanFull()
-                ->columns(2)
+                ->columns(1)
                 ->schema([
                     TextInput::make('lc_header_image_desktop')
-                        ->label('Desktop Image (URL)')
+                        ->label('Desktop Image URL')
                         ->maxLength(2000)
-                        ->columnSpanFull()
-                        ->placeholder('https://cdn.../which-iphone-desktop.webp'),
+                        ->placeholder('https://cdn.../which-iphone-desktop.webp')
+                        ->helperText('แบนเนอร์บน Desktop'),
 
                     TextInput::make('lc_header_image_mobile')
-                        ->label('Mobile Image (URL)')
+                        ->label('Mobile Image URL')
                         ->maxLength(2000)
-                        ->columnSpanFull()
-                        ->placeholder('https://cdn.../which-iphone-mobile.webp'),
+                        ->placeholder('https://cdn.../which-iphone-mobile.webp')
+                        ->helperText('แบนเนอร์บน Mobile'),
 
-                    TextInput::make('lc_header_text')
-                        ->label('Heading Text')
-                        ->maxLength(500)
-                        ->placeholder('iPhone ใดที่เหมาะกับคุณ?'),
-
-                    TextInput::make('lc_header_link')
-                        ->label('Banner Click Link (ทั้งแบนเนอร์)')
-                        ->maxLength(500)
-                        ->placeholder('/iphone/compare'),
-
-                    TextInput::make('lc_header_btn_label')
-                        ->label('Button Label')
-                        ->maxLength(100)
-                        ->placeholder('เปรียบเทียบทุกรุ่น'),
-
-                    TextInput::make('lc_header_btn_href')
-                        ->label('Button URL')
-                        ->maxLength(500)
-                        ->placeholder('/iphone/compare'),
+                    Select::make('lc_banner_action')
+                        ->label('เมื่อคลิกแบนเนอร์')
+                        ->options([
+                            'compare' => 'เปิด Compare Modal (เปรียบเทียบสินค้า)',
+                            'none'    => 'ไม่ทำอะไร',
+                        ])
+                        ->default('compare')
+                        ->helperText('compare = เปิด modal เปรียบเทียบสินค้าทุกรุ่นใน LOB นี้'),
                 ]),
         ]);
     }
@@ -98,9 +87,10 @@ class LobConfigResource extends Resource
                     ->badge()
                     ->sortable(),
 
-                TextColumn::make('lc_header_text')
-                    ->label('Header Text')
-                    ->placeholder('—'),
+                TextColumn::make('lc_banner_action')
+                    ->label('Banner Action')
+                    ->badge()
+                    ->color(fn ($state) => $state === 'compare' ? 'success' : 'gray'),
 
                 TextColumn::make('lc_header_btn_label')
                     ->label('Button')

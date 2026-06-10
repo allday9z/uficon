@@ -19,13 +19,10 @@ class LobConfigController extends Controller
         $config = LobConfig::where('lc_lob', $lobLabel)->first();
 
         return response()->json([
-            'lob'                 => $lobLabel,
-            'headerImageDesktop'  => $config?->lc_header_image_desktop,
-            'headerImageMobile'   => $config?->lc_header_image_mobile,
-            'headerText'          => $config?->lc_header_text,
-            'headerBtnLabel'      => $config?->lc_header_btn_label,
-            'headerBtnHref'       => $config?->lc_header_btn_href,
-            'headerLink'          => $config?->lc_header_link,
+            'lob'                => $lobLabel,
+            'headerImageDesktop' => $config?->lc_header_image_desktop,
+            'headerImageMobile'  => $config?->lc_header_image_mobile,
+            'bannerAction'       => $config?->lc_banner_action ?? 'compare',
         ]);
     }
 }
