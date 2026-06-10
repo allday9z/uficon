@@ -336,11 +336,15 @@ class ImportCaasProducts extends Command
 
         $existed ? $this->updatedCount++ : $this->createdCount++;
 
-        // When updating: clear product-level child records and rebuild
+        // When updating: clear all child records and rebuild from scratch
         if ($existed) {
             $product->options()->delete();
             $product->inbox()->delete();
-            $product->productLevelMedia()->delete();
+            // Delete ALL media (product-level + gallery-linked) before deleting galleries
+            // product_media.pg_id FK is nullOnDelete — must delete media first
+            $product->media()->delete();
+            // Delete galleries (variants.pg_id → NULL via nullOnDelete FK)
+            $product->galleries()->delete();
         }
 
         // Option definitions (from collection option labels)
