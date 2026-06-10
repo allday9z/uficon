@@ -77,7 +77,55 @@ class ProductPdpResource extends JsonResource
             'warrantyDetails' => $this->buildWarrantyDetails(),
 
             'contentSections' => $this->pd_content_sections ?? [],
+
+            // Dynamic option definitions (from product_option table)
+            'productOptions' => $this->buildProductOptions(),
+            // Variant lookup table — full option1-7 per variant for dynamic configurator
+            'variantMap' => $this->buildVariantMap(),
         ];
+    }
+
+    private function buildVariantMap(): array
+    {
+        return $this->variants
+            ->where('pv_available', true)
+            ->sortBy('price')
+            ->map(fn ($v) => array_filter([
+                'handle'    => $v->pv_handle,
+                'price'     => (float) ($v->price ?? 0),
+                'galleryId' => $v->pg_id,
+                // option1 = always the "color" dimension — expose colorId for gallery lookup
+                'colorId'   => $v->pv_option1
+                    ? (Str::slug($v->pv_option1) ?: 'color-' . substr(md5($v->pv_option1), 0, 8))
+                    : null,
+                // Full option slots
+                'option1' => $v->pv_option1,
+                'option2' => $v->pv_option2,
+                'option3' => $v->pv_option3,
+                'option4' => $v->pv_option4,
+                'option5' => $v->pv_option5,
+                'option6' => $v->pv_option6,
+                'option7' => $v->pv_option7,
+                // Swatch images (for color_swatch / band_swatch display)
+                'colorSwatch' => $v->pv_color_swatch ?: null,
+                'bandSwatch'  => $v->pv_band_swatch ?: null,
+            ], fn ($val) => $val !== null))
+            ->values()
+            ->all();
+    }
+
+    /** Option definitions from product_option table — for dynamic configurator */
+    private function buildProductOptions(): array
+    {
+        return $this->options
+            ->sortBy('po_position')
+            ->map(fn ($o) => [
+                'position' => (int) $o->po_position,
+                'name'     => $o->po_name,
+                'display'  => $o->po_display, // color_swatch | band_swatch | button | dropdown
+            ])
+            ->values()
+            ->all();
     }
 
     // ── Private helpers ────────────────────────────────────────────────────

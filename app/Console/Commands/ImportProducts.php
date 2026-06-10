@@ -604,9 +604,10 @@ class ImportProducts extends Command
     {
         $lower = strtolower(trim($optionName));
         return match (true) {
-            str_contains($lower, 'band color') || $lower === 'band'                                                   => 'band_swatch',
-            str_contains($lower, 'color') || str_contains($lower, 'finish') || str_contains($lower, 'colour')        => 'color_swatch',
-            str_contains($lower, 'processor') || str_contains($lower, 'chip') || str_contains($lower, 'cpu')         => 'dropdown',
+            str_contains($lower, 'band color') || str_contains($lower, 'สีของสาย') || str_contains($lower, 'สีสาย') || $lower === 'band' => 'band_swatch',
+            str_contains($lower, 'color') || str_contains($lower, 'finish') || str_contains($lower, 'colour') => 'color_swatch',
+            $lower === 'สี' || str_starts_with($lower, 'สีตัวเรือน') || str_starts_with($lower, 'สีเคส') || str_starts_with($lower, 'case finish') => 'color_swatch',
+            str_contains($lower, 'processor') || str_contains($lower, 'chip') || str_contains($lower, 'cpu') || str_contains($lower, 'โปรเซสเซอร์') => 'dropdown',
             default => 'button',
         };
     }
