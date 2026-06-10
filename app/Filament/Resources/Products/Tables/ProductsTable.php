@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
+use App\Models\Product;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
@@ -44,11 +47,10 @@ class ProductsTable
                 TextColumn::make('inventory_summary')
                     ->label('Inventory')
                     ->getStateUsing(function ($record): string {
-                        $total   = (int) $record->variants()
+                        $total = (int) $record->variants()
                             ->join('inventory', 'product_variant.pv_id', '=', 'inventory.pv_id')
                             ->whereNull('inventory.deleted_at')
                             ->sum('inventory.qty_available');
-                        $variants = (int) $record->variants()->count();
                         return $total . ' in stock';
                     })
                     ->description(fn ($record): string => $record->variants()->count() . ' variants')
@@ -103,37 +105,30 @@ class ProductsTable
 
                 SelectFilter::make('pd_lob')
                     ->label('LOB')
-                    ->options([
-                        'Mac'         => 'Mac',
-                        'iPhone'      => 'iPhone',
-                        'iPad'        => 'iPad',
-                        'Apple Watch' => 'Apple Watch',
-                        'AirPods'     => 'AirPods',
-                        'Apple TV'    => 'Apple TV',
-                        'Accessories' => 'Accessories',
-                        'Audio'       => 'Audio',
-                        'HomePod'     => 'HomePod',
-                    ]),
+                    ->options(fn () => Product::whereNotNull('pd_lob')
+                        ->distinct()->orderBy('pd_lob')->pluck('pd_lob', 'pd_lob')->toArray()
+                    )
+                    ->searchable(),
 
                 SelectFilter::make('pd_sub_lob')
                     ->label('Sub LOB')
                     ->searchable()
                     ->getSearchResultsUsing(fn (string $search) =>
-                        \App\Models\Product::whereNotNull('pd_sub_lob')
+                        Product::whereNotNull('pd_sub_lob')
                             ->where('pd_sub_lob', 'ilike', "%{$search}%")
                             ->distinct()
                             ->pluck('pd_sub_lob', 'pd_sub_lob')
                             ->toArray()
                     )
-                    ->getOptionLabelUsing(fn ($value) => $value),
+                    ->getOptionLabelUsing(fn (string $value): string => $value),
 
                 SelectFilter::make('brand_id')
                     ->label('Vendor')
                     ->relationship('brand', 'brand_name'),
             ])
-            ->filtersLayout(\Filament\Tables\Enums\FiltersLayout::AboveContent)
+            ->filtersLayout(FiltersLayout::AboveContent)
             ->filtersTriggerAction(
-                fn (\Filament\Actions\Action $action) => $action->button()->label('ตัวกรอง')
+                fn (Action $action) => $action->button()->label('ตัวกรอง')
             )
             ->recordActions([
                 EditAction::make(),

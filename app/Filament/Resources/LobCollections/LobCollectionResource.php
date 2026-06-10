@@ -4,17 +4,17 @@ namespace App\Filament\Resources\LobCollections;
 
 use App\Filament\Resources\LobCollections\Pages\ManageLobCollections;
 use App\Models\LobDisplayCollection;
-use BackedEnum;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use App\Models\Product;
+use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -30,7 +30,7 @@ class LobCollectionResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'คลังสินค้า';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquares2x2;
 
     protected static ?string $navigationLabel = 'LOB Collections';
 
@@ -65,11 +65,9 @@ class LobCollectionResource extends Resource
                         )
                         ->searchable()
                         ->live()
-                        ->afterStateUpdated(function ($state, callable $set, Get $get) {
-                            // Auto-fill slug + title when Sub LOB is selected
+                        ->afterStateUpdated(function (?string $state, Set $set) {
                             if ($state) {
-                                $slug = Str::slug($state) ?: 'group-' . substr(md5($state), 0, 8);
-                                $set('ldc_slug', $slug);
+                                $set('ldc_slug', Str::slug($state) ?: 'group-' . substr(md5($state), 0, 8));
                                 $set('ldc_title', $state);
                             }
                         }),
@@ -237,14 +235,10 @@ class LobCollectionResource extends Resource
             ->filters([
                 SelectFilter::make('ldc_lob')
                     ->label('LOB')
-                    ->options([
-                        'Mac'         => 'Mac',
-                        'iPhone'      => 'iPhone',
-                        'iPad'        => 'iPad',
-                        'Apple Watch' => 'Apple Watch',
-                        'AirPods'     => 'AirPods',
-                        'Accessories' => 'Accessories',
-                    ]),
+                    ->options(fn () => LobDisplayCollection::whereNotNull('ldc_lob')
+                        ->distinct()->orderBy('ldc_lob')->pluck('ldc_lob', 'ldc_lob')->toArray()
+                    )
+                    ->searchable(),
             ])
             ->recordActions([
                 EditAction::make(),

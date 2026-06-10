@@ -9,6 +9,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
 
 class ManageLobCollections extends ManageRecords
@@ -20,7 +21,7 @@ class ManageLobCollections extends ManageRecords
         return [
             Action::make('sync_from_products')
                 ->label('Sync จาก Products')
-                ->icon(\Filament\Support\Icons\Heroicon::ArrowPath)
+                ->icon(Heroicon::ArrowPath)
                 ->color('gray')
                 ->requiresConfirmation()
                 ->modalHeading('Sync LOB Collections จาก Product data')
