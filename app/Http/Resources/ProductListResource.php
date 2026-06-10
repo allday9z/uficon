@@ -8,20 +8,26 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * PLP card shape — consumed by iStudio PLPPage and PLPProductRow.
  *
- * Eager loads required: productLevelMedia
+ * Eager loads required: variants, galleries.media
  */
 class ProductListResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $firstImage = $this->productLevelMedia
-            ->where('pm_type', 'image')
-            ->sortBy('pm_position')
-            ->first();
-
         $cheapestVariant = $this->variants
             ->where('pv_available', true)
             ->sortBy('price')
+            ->first();
+
+        // Deterministic Representative Image: use defaultColor gallery
+        // defaultColor = cheapest available variant's gallery (pg_id)
+        $defaultGallery = $cheapestVariant?->pg_id
+            ? $this->galleries->firstWhere('pg_id', $cheapestVariant->pg_id)
+            : $this->galleries->first();
+
+        $firstImage = $defaultGallery?->media
+            ->where('pm_type', 'image')
+            ->sortBy('pm_position')
             ->first();
 
         return [

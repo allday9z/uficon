@@ -133,7 +133,7 @@ class ProductCollectionController extends Controller
         $products = Product::query()
             ->where('pd_sub_lob', $subLob)
             ->where('pd_status', 'active')
-            ->with(['productLevelMedia', 'variants', 'galleries'])
+            ->with(['variants', 'galleries.media'])
             ->get();
 
         return ProductListResource::collection($products);

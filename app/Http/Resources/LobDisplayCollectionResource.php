@@ -21,7 +21,7 @@ class LobDisplayCollectionResource extends JsonResource
             ->where('pd_lob', $this->ldc_lob)
             ->where('pd_sub_lob', $this->ldc_sub_lob)
             ->where('pd_status', 'active')
-            ->with(['productLevelMedia', 'variants'])
+            ->with(['variants', 'galleries.media'])
             ->get()
             ->sortBy(fn ($p) => $p->variants->where('pv_available', true)->min('price') ?? PHP_INT_MAX)
             ->first();
@@ -30,10 +30,15 @@ class LobDisplayCollectionResource extends JsonResource
             ? (float) ($cheapest->variants->where('pv_available', true)->min('price') ?? 0)
             : 0;
 
-        // Hero image: explicit field → cheapest product image fallback
+        // Deterministic Representative Image: use defaultColor gallery
+        // defaultColor = cheapest available variant's gallery
         $heroImage = $this->ldc_hero_image;
         if (! $heroImage && $cheapest) {
-            $heroImage = $cheapest->productLevelMedia
+            $cheapestVariant = $cheapest->variants->where('pv_available', true)->sortBy('price')->first();
+            $defaultGallery  = $cheapestVariant?->pg_id
+                ? $cheapest->galleries->firstWhere('pg_id', $cheapestVariant->pg_id)
+                : $cheapest->galleries->first();
+            $heroImage = $defaultGallery?->media
                 ->where('pm_type', 'image')
                 ->sortBy('pm_position')
                 ->first()?->pm_src ?? '';

@@ -129,8 +129,14 @@ class ProductPdpResource extends JsonResource
 
     private function buildMedia(): array
     {
+        // galleryId lets the frontend filter media by selected color.id → pg_slug match
         return $this->productLevelMedia->map(function ($m) {
-            $item = ['type' => $m->pm_type, 'src' => $m->pm_src, 'alt' => $m->pm_alt ?? ''];
+            $item = [
+                'type'      => $m->pm_type,
+                'src'       => $m->pm_src,
+                'alt'       => $m->pm_alt ?? '',
+                'galleryId' => $m->pg_id,
+            ];
             if ($m->pm_type === 'video' && ! empty($m->pm_poster)) {
                 $item['poster'] = $m->pm_poster;
             }

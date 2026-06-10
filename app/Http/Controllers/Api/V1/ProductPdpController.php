@@ -11,7 +11,7 @@ class ProductPdpController extends Controller
 {
     public function show(string $handle): ProductPdpResource|JsonResponse
     {
-        $product = Product::with(['productLevelMedia', 'inbox', 'variants', 'options'])
+        $product = Product::with(['productLevelMedia', 'inbox', 'variants', 'options', 'galleries'])
             ->where('pd_handle', $handle)
             ->where('pd_status', 'active')
             ->firstOrFail();
