@@ -129,8 +129,7 @@ class ProductsTable
 
                 SelectFilter::make('brand_id')
                     ->label('Vendor')
-                    ->relationship('brand', 'brand_name')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->relationship('brand', 'brand_name'),
             ])
             ->filtersLayout(\Filament\Tables\Enums\FiltersLayout::AboveContent)
             ->filtersTriggerAction(
