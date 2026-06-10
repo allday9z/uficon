@@ -65,6 +65,23 @@ class ManageLobCollections extends ManageRecords
                         ->send();
                 }),
 
+            Action::make('delete_all')
+                ->label('ลบทั้งหมด')
+                ->icon(Heroicon::Trash)
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('ลบ LOB Collections ทั้งหมด')
+                ->modalDescription('ลบทุก record ใน lob_display_collection — ใช้ก่อน re-import เพื่อ reset ข้อมูลทั้งหมด')
+                ->action(function () {
+                    $count = LobDisplayCollection::count();
+                    LobDisplayCollection::truncate();
+
+                    Notification::make()
+                        ->title("ลบแล้ว {$count} records — รัน Import หรือ Sync จาก Products เพื่อสร้างใหม่")
+                        ->warning()
+                        ->send();
+                }),
+
             CreateAction::make(),
         ];
     }
