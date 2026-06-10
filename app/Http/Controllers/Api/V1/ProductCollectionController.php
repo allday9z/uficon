@@ -14,6 +14,42 @@ use Illuminate\Support\Str;
 class ProductCollectionController extends Controller
 {
     /**
+     * GET /api/v1/lob/{lob}/products
+     *
+     * Returns ALL individual products in a LOB — for LOBPage FamilyStripe chips.
+     * Ordered by lob_display_collection.ldc_sale_date DESC (newest→oldest),
+     * then by pd_primary_title for products without sale_date.
+     */
+    public function lobProducts(string $lob): AnonymousResourceCollection|JsonResponse
+    {
+        $lobLabel = $this->normalizeLob($lob);
+
+        // Join with lob_display_collection to get sort order per sub_lob
+        $products = Product::query()
+            ->where('pd_lob', $lobLabel)
+            ->where('pd_status', 'active')
+            ->with(['variants', 'galleries.media'])
+            ->get()
+            ->sortBy(function (Product $p) {
+                // Sort by ldc_sale_date of this sub_lob group (newest first)
+                $ldc = LobDisplayCollection::where('ldc_lob', $p->pd_lob)
+                    ->where('ldc_sub_lob', $p->pd_sub_lob)
+                    ->first();
+                // Use sale_date DESC: negate timestamp for descending
+                return $ldc?->ldc_sale_date
+                    ? -strtotime($ldc->ldc_sale_date)
+                    : 0;
+            })
+            ->values();
+
+        if ($products->isEmpty()) {
+            return response()->json(['message' => "No products found for LOB: {$lob}"], 404);
+        }
+
+        return ProductListResource::collection($products);
+    }
+
+    /**
      * GET /api/v1/lob/{lob}/collections
      *
      * Returns display groups for a LOB (e.g. "mac").

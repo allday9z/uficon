@@ -18,6 +18,7 @@ Route::prefix('v1')->group(function () {
 
     // Public product APIs — no auth required
     Route::get('/lob/{lob}/config', [LobConfigController::class, 'show']);
+    Route::get('/lob/{lob}/products', [ProductCollectionController::class, 'lobProducts']);
     Route::get('/lob/{lob}/collections', [ProductCollectionController::class, 'lobCollections']);
     Route::get('/collections/{slug}', [ProductCollectionController::class, 'show']);
     Route::get('/collections/{slug}/products', [ProductCollectionController::class, 'products']);
