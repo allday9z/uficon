@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Models\Store;
 use App\Http\Controllers\Api\V1\LobConfigController;
+use App\Http\Controllers\Api\V1\SearchController;
 use App\Http\Controllers\Api\V1\ProductCollectionController;
 use App\Http\Controllers\Api\V1\ProductPdpController;
 use App\Http\Controllers\Api\V1\StoreController;
@@ -17,6 +18,7 @@ Route::prefix('v1')->group(function () {
         ->middleware(['auth.api', 'secure.payload', 'log.api']);
 
     // Public product APIs — no auth required
+    Route::get('/search', [SearchController::class, 'search']);
     Route::get('/lob/{lob}/config', [LobConfigController::class, 'show']);
     Route::get('/lob/{lob}/products', [ProductCollectionController::class, 'lobProducts']);
     Route::get('/lob/{lob}/collections', [ProductCollectionController::class, 'lobCollections']);
