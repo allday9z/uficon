@@ -430,8 +430,15 @@ class ImportProducts extends Command
         if ($isUpdate) {
             $product->options()->delete();
             $product->inbox()->delete();
-            $product->productLevelMedia()->delete();
+            // Delete ALL media first (gallery-linked), then galleries
+            $product->media()->delete();
+            $product->galleries()->delete();
         }
+
+        // Safety: purge orphaned empty-slug galleries (survived old imports)
+        \App\Models\ProductGallery::where('pd_id', $product->pd_id)
+            ->where(fn ($q) => $q->where('pg_slug', '')->orWhereNull('pg_slug'))
+            ->delete();
 
         // Option definitions from collection
         $optionLabels = $collection->pcol_option_labels ?? [];
