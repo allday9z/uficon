@@ -6,24 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\LobConfig;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class LobConfigController extends Controller
 {
     public function show(string $lob): JsonResponse
     {
-        $lobLabel = match (strtolower($lob)) {
-            'mac'                      => 'Mac',
-            'iphone'                   => 'iPhone',
-            'ipad'                     => 'iPad',
-            'watch', 'apple-watch'     => 'Apple Watch',
-            'airpods', 'music'         => 'AirPods',
-            'tv', 'appletv', 'apple-tv',
-            'tv-home', 'tv-and-home'   => 'Apple TV',
-            'accessories'              => 'Accessories',
-            'audio'                    => 'Audio',
-            'homepod'                  => 'HomePod',
-            default                    => ucfirst($lob),
-        };
+        $lobLabel = LobConfig::resolveLob($lob);
 
         $config = LobConfig::where('lc_lob', $lobLabel)->first();
 

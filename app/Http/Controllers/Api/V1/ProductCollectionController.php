@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LobDisplayCollectionResource;
 use App\Http\Resources\ProductListResource;
+use App\Models\LobConfig;
 use App\Models\LobDisplayCollection;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
@@ -180,18 +181,6 @@ class ProductCollectionController extends Controller
     /** Normalize URL lob segment to title-case label stored in DB. */
     private function normalizeLob(string $lob): string
     {
-        return match (strtolower($lob)) {
-            'mac'                              => 'Mac',
-            'iphone'                           => 'iPhone',
-            'ipad'                             => 'iPad',
-            'watch', 'apple-watch'             => 'Apple Watch',
-            'airpods', 'music'                 => 'AirPods',
-            'tv', 'appletv', 'apple-tv',
-            'tv-home', 'tv-and-home'           => 'Apple TV',
-            'accessories'                      => 'Accessories',
-            'audio'                            => 'Audio',
-            'homepod'                          => 'HomePod',
-            default                            => ucfirst($lob),
-        };
+        return LobConfig::resolveLob($lob);
     }
 }

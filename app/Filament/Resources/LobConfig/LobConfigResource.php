@@ -39,15 +39,23 @@ class LobConfigResource extends Resource
 
             Section::make('LOB')
                 ->columnSpanFull()
+                ->columns(2)
                 ->schema([
                     Select::make('lc_lob')
-                        ->label('LOB')
+                        ->label('LOB (ชื่อจริงใน DB)')
                         ->required()
                         ->unique(ignorable: fn ($record) => $record)
                         ->options(fn () => Product::whereNotNull('pd_lob')
                             ->distinct()->orderBy('pd_lob')->pluck('pd_lob', 'pd_lob')->toArray()
                         )
                         ->searchable(),
+
+                    TextInput::make('lc_url_slug')
+                        ->label('URL Slug (alias)')
+                        ->unique(ignorable: fn ($record) => $record)
+                        ->maxLength(100)
+                        ->placeholder('music')
+                        ->helperText('slug ที่ใช้ใน /pages/view-all-{slug} ถ้าต่างจากชื่อ LOB เช่น AirPods → music'),
                 ]),
 
             Section::make('Header Banner')
@@ -97,6 +105,12 @@ class LobConfigResource extends Resource
                     ->label('LOB')
                     ->badge()
                     ->sortable(),
+
+                TextColumn::make('lc_url_slug')
+                    ->label('URL Slug')
+                    ->fontFamily('mono')
+                    ->color('gray')
+                    ->placeholder('—'),
 
                 ImageColumn::make('lc_header_image_desktop')
                     ->label('Desktop')
