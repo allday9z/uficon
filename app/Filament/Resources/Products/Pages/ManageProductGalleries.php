@@ -3,12 +3,15 @@
 namespace App\Filament\Resources\Products\Pages;
 
 use App\Filament\Resources\Products\ProductResource;
+use App\Models\Product;
 use App\Models\ProductGallery;
 use App\Models\ProductMedia;
+use Filament\Actions\Action;
 use Filament\Actions\Action as FormAction;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Support\Icons\Heroicon;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
@@ -97,6 +100,109 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->panelLayout('grid')
                 ->columnSpanFull(),
         ]);
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('scrape_istudio')
+                ->label('Scrape from istudio.store')
+                ->icon(Heroicon::ArrowDownTray)
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Scrape gallery images from istudio.store')
+                ->modalDescription('ดึงรูปจาก istudio.store/{pv_handle}.json → download เก็บ local storage → สร้าง/อัปเดต gallery + media records')
+                ->action(function () {
+                    /** @var \App\Models\Product $product */
+                    $product = $this->getOwnerRecord();
+                    $product->loadMissing('variants');
+
+                    $results = $this->scrapeIstudioGalleries($product);
+
+                    Notification::make()
+                        ->title("Scraped: {$results['galleries']} galleries, {$results['images']} images downloaded")
+                        ->success()
+                        ->send();
+                }),
+        ];
+    }
+
+    // ── Scraper ──────────────────────────────────────────────────────────
+
+    private function scrapeIstudioGalleries(\App\Models\Product $product): array
+    {
+        $totalGalleries = 0;
+        $totalImages    = 0;
+        $seenColors     = [];
+
+        foreach ($product->variants as $variant) {
+            if (! $variant->pv_handle || ! $variant->pv_option1) continue;
+
+            $colorName = $variant->pv_option1;
+            if (isset($seenColors[$colorName])) continue;
+            $seenColors[$colorName] = true;
+
+            // Fetch product JSON from istudio.store
+            $url  = "https://www.istudio.store/products/{$variant->pv_handle}.json";
+            $json = @file_get_contents($url, false, stream_context_create([
+                'http' => ['timeout' => 8, 'header' => "User-Agent: Mozilla/5.0\r\n"],
+            ]));
+            if (! $json) continue;
+
+            $data = json_decode($json, true);
+            $shopifyImages = $data['product']['images'] ?? [];
+            if (empty($shopifyImages)) continue;
+
+            // Find or create gallery for this color
+            $gallerySlug = \Illuminate\Support\Str::slug($colorName)
+                ?: 'color-' . substr(md5($colorName), 0, 8);
+
+            $gallery = ProductGallery::firstOrCreate(
+                ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
+                ['pg_name' => $colorName, 'pg_position' => 0]
+            );
+            $totalGalleries++;
+
+            // Delete existing images for this gallery (fresh scrape)
+            ProductMedia::where('pd_id', $product->pd_id)
+                ->where('pg_id', $gallery->pg_id)
+                ->whereIn('pm_type', ['image', 'video'])
+                ->delete();
+
+            // Download + store each image
+            $position = 1;
+            $dir = "products/{$product->pd_handle}/{$gallerySlug}";
+            foreach ($shopifyImages as $img) {
+                $srcUrl = $img['src'] ?? '';
+                if (! $srcUrl) continue;
+
+                // Download image
+                $contents = @file_get_contents($srcUrl, false, stream_context_create([
+                    'http' => ['timeout' => 10, 'header' => "User-Agent: Mozilla/5.0\r\n"],
+                ]));
+                if (! $contents) continue;
+
+                $ext      = pathinfo(parse_url($srcUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                $filename = sprintf('%s/%03d.%s', $dir, $position, $ext);
+                Storage::disk('public')->put($filename, $contents);
+
+                $localUrl = Storage::disk('public')->url($filename);
+
+                ProductMedia::create([
+                    'pd_id'       => $product->pd_id,
+                    'pg_id'       => $gallery->pg_id,
+                    'pm_src'      => $localUrl,
+                    'pm_type'     => 'image',
+                    'pm_position' => $position,
+                    'pm_alt'      => $colorName,
+                ]);
+
+                $position++;
+                $totalImages++;
+            }
+        }
+
+        return ['galleries' => $totalGalleries, 'images' => $totalImages];
     }
 
     protected function handleRecordCreation(array $data): Model
