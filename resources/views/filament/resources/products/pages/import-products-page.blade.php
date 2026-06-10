@@ -197,21 +197,17 @@
             </div>
 
             <div style="margin-top:1.25rem; display:flex; gap:.75rem;">
-                <x-filament::button
+                <button
                     wire:click="doImport"
                     wire:loading.attr="disabled"
-                    icon="heroicon-o-cloud-arrow-up"
-                    color="success"
-                    size="md"
+                    wire:loading.class="opacity-75 cursor-wait"
+                    style="display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;border-radius:.5rem;background:#16a34a;color:#fff;font-size:.875rem;font-weight:600;border:none;cursor:pointer;"
                 >
+                    <svg wire:loading.remove wire:target="doImport" style="width:1rem;height:1rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
                     <span wire:loading.remove wire:target="doImport">Confirm Import</span>
-                    <span wire:loading wire:target="doImport" style="display:flex;gap:.5rem;align-items:center;">
-                        <svg style="width:1rem;height:1rem;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                        </svg>
-                        Importing…
-                    </span>
-                </x-filament::button>
+                    <svg wire:loading wire:target="doImport" style="width:1rem;height:1rem;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    <span wire:loading wire:target="doImport">Importing…</span>
+                </button>
 
                 <x-filament::button wire:click="goBack" color="gray" icon="heroicon-o-arrow-left" size="md">
                     Back

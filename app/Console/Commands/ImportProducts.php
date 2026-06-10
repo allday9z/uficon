@@ -542,8 +542,10 @@ class ImportProducts extends Command
         $colorName = $this->get($row, 'ProductVariant', 'pv_option1');
         $gallery   = null;
         if ($colorName) {
+            // Thai Slug Fallback Rule: Str::slug() strips Thai → use hash fallback
+            $gallerySlug = Str::slug($colorName) ?: 'color-' . substr(md5($colorName), 0, 8);
             $gallery = ProductGallery::firstOrCreate(
-                ['pd_id' => $product->pd_id, 'pg_slug' => Str::slug($colorName)],
+                ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
                 ['pg_name' => $colorName, 'pg_position' => 0]
             );
             $variantFields['pg_id'] = $gallery->pg_id;
