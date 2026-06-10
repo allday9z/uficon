@@ -117,7 +117,9 @@ class ProductPdpResource extends JsonResource
             ->sortBy('price')
             ->unique($field)
             ->map(fn ($v) => array_filter([
-                'id'       => Str::slug($v->$field),
+                // Thai Slug Fallback Rule: Str::slug() strips Thai → empty.
+                // Must match ProductGallery.pg_slug exactly for gallery image switching.
+                'id'       => Str::slug($v->$field) ?: 'color-' . substr(md5($v->$field), 0, 8),
                 'name'     => $v->$field,
                 'imageSrc' => $v->pv_color_swatch ?: null,
             ], fn ($val) => $val !== null))
