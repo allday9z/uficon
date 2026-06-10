@@ -45,8 +45,9 @@ class ProductListResource extends JsonResource
                 'base'     => (float) ($cheapestVariant?->price ?? $this->price ?? 0),
                 'currency' => 'THB',
             ],
-            'category'    => $this->collection?->pcol_handle,
-            'collection'  => $this->collection?->pcol_handle,
+            'templateType' => $this->pd_template_type ?? 'simple',
+            'category'     => $this->collection?->pcol_handle,
+            'collection'   => $this->collection?->pcol_handle,
         ];
     }
 }

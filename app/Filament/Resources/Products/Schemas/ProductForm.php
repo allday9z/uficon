@@ -979,10 +979,10 @@ class ProductForm
                                 Select::make('pd_template_type')
                                     ->label('Frontend template')
                                     ->options([
-                                        'normal'     => 'Normal (iPhone style — swatches/buttons)',
-                                        'fulldetail' => 'Full detail (MacBook style — dropdowns)',
+                                        'simple'  => 'Simple (iPhone/iPad/Watch/AirPods)',
+                                        'full'     => 'Full (MacBook/Mac)',
                                     ])
-                                    ->default('normal')
+                                    ->default('simple')
                                     ->required()
                                     ->native(false)
                                     ->helperText('Controls how the product page renders on the frontend'),
