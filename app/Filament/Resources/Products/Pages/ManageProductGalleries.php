@@ -14,6 +14,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Support\Icons\Heroicon;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
@@ -26,7 +27,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
-use Illuminate\Support\Str;
 
 class ManageProductGalleries extends ManageRelatedRecords
 {
@@ -111,23 +111,16 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->placeholder('Black, White Titanium, Desert Titanium…')
                 ->required()
                 ->maxLength(100)
-                ->live(onBlur: true)
-                ->afterStateUpdated(function (?string $state, callable $set, callable $get) {
-                    if (filled($state) && blank($get('pg_slug'))) {
-                        $set('pg_slug', Str::slug($state));
-                    }
-                })
                 ->columnSpanFull(),
 
-            TextInput::make('pg_slug')
-                ->label('Slug')
-                ->placeholder('auto-filled from name')
-                ->maxLength(100)
-                ->columnSpanFull(),
+            // pg_slug auto-generated via ProductGallery::booted() on create; preserved as-is on edit
+            Hidden::make('pg_slug'),
 
-            // ── Existing images: sortable + deletable Repeater ────────────
+            // ── Existing images: drag-to-sort + delete ────────────────────
             Repeater::make('existing_media')
-                ->label('Current images (drag to sort, ✕ to delete)')
+                ->label(fn ($record) => $record
+                    ? 'Images (' . $record->media()->count() . ') — drag to sort, ✕ to remove'
+                    : 'Images')
                 ->columnSpanFull()
                 ->reorderable()
                 ->deletable()
@@ -137,53 +130,58 @@ class ManageProductGalleries extends ManageRelatedRecords
                         ->label('')
                         ->columnSpanFull()
                         ->content(function ($get): HtmlString {
-                            $src = $get('pm_src') ?? '';
-                            $alt = e($get('pm_alt') ?? '');
-                            $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
-                            $thumb = in_array($ext, ['mp4', 'mov', 'webm'])
-                                ? '<div style="width:48px;height:48px;background:#1f2937;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af;">▶</div>'
+                            $src  = $get('pm_src') ?? '';
+                            $ext  = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+                            $name = basename(parse_url($src, PHP_URL_PATH));
+
+                            $isVideo = in_array($ext, ['mp4', 'mov', 'webm']);
+                            $thumb   = $isVideo
+                                ? '<div style="width:60px;height:60px;background:#1f2937;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;">▶</div>'
                                 : '<div class="gt" style="position:relative;flex-shrink:0;">
-                                    <img class="t" src="' . e($src) . '" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;cursor:zoom-in;"/>
-                                    <img class="z" src="' . e($src) . '" loading="lazy" style="display:none;position:absolute;top:0;left:54px;z-index:9999;width:200px;height:200px;object-fit:contain;background:#111;border:1px solid #6b7280;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.8);"/>
-                                  </div>';
-                            $short = strlen($src) > 60 ? '…' . substr($src, -50) : $src;
+                                    <img class="t" src="' . e($src) . '" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:8px;cursor:zoom-in;"/>
+                                    <img class="z" src="' . e($src) . '" loading="lazy" style="display:none;position:absolute;top:0;left:66px;z-index:9999;width:260px;height:260px;object-fit:contain;background:#111;border:1px solid #374151;border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.9);"/>
+                                   </div>';
+
+                            $badge = $isVideo
+                                ? ' <span style="font-size:10px;background:#374151;color:#9ca3af;padding:1px 5px;border-radius:4px;vertical-align:middle;">VIDEO</span>'
+                                : '';
+
                             return new HtmlString('
-<style>.gt:hover .t{opacity:.7;}.gt:hover .z{display:block!important;}</style>
-<div style="display:flex;align-items:center;gap:10px;padding:2px 0;">
+<style>.gt:hover .t{opacity:.75;}.gt:hover .z{display:block!important;}</style>
+<div style="display:flex;align-items:center;gap:12px;padding:4px 0;">
   ' . $thumb . '
-  <div style="flex:1;min-width:0;">
-    <div style="font-size:13px;font-weight:500;color:#f9fafb;">' . $alt . '</div>
-    <div style="font-size:11px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' . e($src) . '">' . e($short) . '</div>
-  </div>
+  <div style="flex:1;min-width:0;font-size:13px;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' . e($src) . '">' . e($name) . $badge . '</div>
 </div>');
                         }),
-                    TextInput::make('pm_alt')->label('Alt text')->maxLength(200)->columnSpanFull(),
-                    TextInput::make('pm_id')->hidden(),
-                    TextInput::make('pm_position')->hidden(),
-                    TextInput::make('pm_src')->hidden(),
+                    Hidden::make('pm_id'),
+                    Hidden::make('pm_position'),
+                    Hidden::make('pm_src'),
+                    Hidden::make('pm_alt'),
                 ])
                 ->afterStateHydrated(function ($component, $record) {
                     if (! $record) { $component->state([]); return; }
                     $items = $record->media()->orderBy('pm_position')->get()
-                        ->map(fn ($m) => ['pm_id' => $m->pm_id, 'pm_src' => $m->pm_src, 'pm_alt' => $m->pm_alt, 'pm_position' => $m->pm_position])
+                        ->map(fn ($m) => [
+                            'pm_id'       => $m->pm_id,
+                            'pm_src'      => $m->pm_src,
+                            'pm_alt'      => $m->pm_alt,
+                            'pm_position' => $m->pm_position,
+                        ])
                         ->toArray();
                     $component->state($items);
                 })
                 ->visible(fn ($record) => $record !== null),
 
-            // ── Multi-file drop zone ──────────────────────────────────────
+            // ── Upload new images ─────────────────────────────────────────
             FileUpload::make('gallery_images')
-                ->label(fn ($record) => $record ? 'Add more images / videos' : 'Images / Videos')
-                ->helperText('Drag & drop หรือคลิกเพื่อเลือกหลายไฟล์พร้อมกัน — รองรับ JPG, PNG, WebP, AVIF, MP4')
+                ->label(fn ($record) => $record ? 'Add images / videos' : 'Images / Videos')
+                ->helperText('JPG · PNG · WebP · AVIF · MP4 — สูงสุด 50 ไฟล์, 50MB/ไฟล์')
                 ->disk('public')
                 ->directory('products/galleries')
                 ->multiple()
-                ->reorderable()
-                ->image()
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'])
                 ->maxSize(51200)
                 ->maxFiles(50)
-                ->imagePreviewHeight('100')
                 ->panelLayout('grid')
                 ->columnSpanFull(),
         ]);
@@ -221,132 +219,11 @@ class ManageProductGalleries extends ManageRelatedRecords
         ];
     }
 
-    // ── Scraper ──────────────────────────────────────────────────────────
-
-    /** Scrape exactly ONE gallery (1 color) — stays under 30s limit */
-    private function scrapeOneGallery(\App\Models\Product $product, ProductGallery $gallery): int
-    {
-        $colorName = $gallery->pg_name;
-        $variant   = $product->variants->first(fn ($v) => $v->pv_option1 === $colorName)
-            ?? $product->variants->first();
-        if (! $variant?->pv_handle) return 0;
-
-        $url  = "https://www.istudio.store/products/{$variant->pv_handle}.json";
-        $ctx  = stream_context_create(['http' => ['timeout' => 8, 'header' => "User-Agent: Mozilla/5.0\r\n"]]);
-        $json = @file_get_contents($url, false, $ctx);
-        if (! $json) return 0;
-
-        $shopifyImages = json_decode($json, true)['product']['images'] ?? [];
-        if (empty($shopifyImages)) return 0;
-
-        ProductMedia::where('pd_id', $product->pd_id)
-            ->where('pg_id', $gallery->pg_id)
-            ->whereIn('pm_type', ['image', 'video'])
-            ->delete();
-
-        $dir      = "products/{$product->pd_handle}/{$gallery->pg_slug}";
-        $position = 1;
-        foreach ($shopifyImages as $img) {
-            $srcUrl   = $img['src'] ?? '';
-            if (! $srcUrl) continue;
-            $contents = @file_get_contents($srcUrl, false, $ctx);
-            if (! $contents) continue;
-            $ext      = pathinfo(parse_url($srcUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-            $filename = sprintf('%s/%03d.%s', $dir, $position, $ext);
-            Storage::disk('public')->put($filename, $contents);
-            ProductMedia::create([
-                'pd_id'       => $product->pd_id,
-                'pg_id'       => $gallery->pg_id,
-                'pm_src'      => Storage::disk('public')->url($filename),
-                'pm_type'     => 'image',
-                'pm_position' => $position,
-                'pm_alt'      => $colorName,
-            ]);
-            $position++;
-        }
-        return $position - 1;
-    }
-
-    private function scrapeIstudioGalleries(\App\Models\Product $product): array
-    {
-        $totalGalleries = 0;
-        $totalImages    = 0;
-        $seenColors     = [];
-
-        foreach ($product->variants as $variant) {
-            if (! $variant->pv_handle || ! $variant->pv_option1) continue;
-
-            $colorName = $variant->pv_option1;
-            if (isset($seenColors[$colorName])) continue;
-            $seenColors[$colorName] = true;
-
-            // Fetch product JSON from istudio.store
-            $url  = "https://www.istudio.store/products/{$variant->pv_handle}.json";
-            $json = @file_get_contents($url, false, stream_context_create([
-                'http' => ['timeout' => 8, 'header' => "User-Agent: Mozilla/5.0\r\n"],
-            ]));
-            if (! $json) continue;
-
-            $data = json_decode($json, true);
-            $shopifyImages = $data['product']['images'] ?? [];
-            if (empty($shopifyImages)) continue;
-
-            // Find or create gallery for this color
-            $gallerySlug = \Illuminate\Support\Str::slug($colorName)
-                ?: 'color-' . substr(md5($colorName), 0, 8);
-
-            $gallery = ProductGallery::firstOrCreate(
-                ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
-                ['pg_name' => $colorName, 'pg_position' => 0]
-            );
-            $totalGalleries++;
-
-            // Delete existing images for this gallery (fresh scrape)
-            ProductMedia::where('pd_id', $product->pd_id)
-                ->where('pg_id', $gallery->pg_id)
-                ->whereIn('pm_type', ['image', 'video'])
-                ->delete();
-
-            // Download + store each image
-            $position = 1;
-            $dir = "products/{$product->pd_handle}/{$gallerySlug}";
-            foreach ($shopifyImages as $img) {
-                $srcUrl = $img['src'] ?? '';
-                if (! $srcUrl) continue;
-
-                // Download image
-                $contents = @file_get_contents($srcUrl, false, stream_context_create([
-                    'http' => ['timeout' => 10, 'header' => "User-Agent: Mozilla/5.0\r\n"],
-                ]));
-                if (! $contents) continue;
-
-                $ext      = pathinfo(parse_url($srcUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                $filename = sprintf('%s/%03d.%s', $dir, $position, $ext);
-                Storage::disk('public')->put($filename, $contents);
-
-                $localUrl = Storage::disk('public')->url($filename);
-
-                ProductMedia::create([
-                    'pd_id'       => $product->pd_id,
-                    'pg_id'       => $gallery->pg_id,
-                    'pm_src'      => $localUrl,
-                    'pm_type'     => 'image',
-                    'pm_position' => $position,
-                    'pm_alt'      => $colorName,
-                ]);
-
-                $position++;
-                $totalImages++;
-            }
-        }
-
-        return ['galleries' => $totalGalleries, 'images' => $totalImages];
-    }
 
     protected function handleRecordCreation(array $data): Model
     {
-        $images = $data['gallery_images'] ?? [];
-        unset($data['gallery_images']);
+        $images = array_values($data['gallery_images'] ?? []);
+        unset($data['gallery_images'], $data['existing_media']);
 
         /** @var ProductGallery $gallery */
         $gallery = $this->getOwnerRecord()->galleries()->create($data);
@@ -393,6 +270,7 @@ class ManageProductGalleries extends ManageRelatedRecords
             }
         }
 
+        $images = array_values($images);
         if (! empty($images)) {
             $nextPosition = $record->media()->max('pm_position') + 1;
             foreach ($images as $i => $path) {
@@ -450,27 +328,35 @@ class ManageProductGalleries extends ManageRelatedRecords
             ->defaultSort('pg_position')
             ->description(fn (): HtmlString => $this->scrapeProgress ? $this->scrapeProgressHtml() : new HtmlString(''))
             ->headerActions([
-                CreateAction::make()->label('+ New gallery')->modalWidth('2xl'),
+                CreateAction::make()
+                    ->label('+ New gallery')
+                    ->modalWidth('2xl')
+                    ->using(fn (array $data) => $this->handleRecordCreation($data)),
             ])
             ->recordActions([
-                EditAction::make()->modalWidth('2xl'),
+                EditAction::make()
+                    ->modalWidth('2xl')
+                    ->using(fn (Model $record, array $data) => $this->handleRecordUpdate($record, $data)),
 
-                // Per-color scrape — runs 1 color only → no timeout
                 \Filament\Actions\Action::make('scrape_one')
                     ->label('Scrape')
                     ->icon(Heroicon::ArrowDownTray)
                     ->color('gray')
                     ->requiresConfirmation()
                     ->modalHeading(fn (ProductGallery $record) => "Scrape '{$record->pg_name}'")
+                    ->modalDescription('ดาวน์โหลดรูปใน background — progress bar จะปรากฏขณะทำงาน')
                     ->action(function (ProductGallery $record) {
-                        try {
-                            $product = $this->getOwnerRecord();
-                            $product->loadMissing('variants');
-                            $count = $this->scrapeOneGallery($product, $record);
-                            Notification::make()->title("Scraped {$count} images for '{$record->pg_name}'")->success()->send();
-                        } catch (\Throwable $e) {
-                            Notification::make()->title('Scrape failed: ' . $e->getMessage())->danger()->send();
-                        }
+                        $product = $this->getOwnerRecord();
+
+                        Cache::put("scrape_gallery_{$product->pd_id}", [
+                            'status' => 'processing', 'total' => 1, 'done' => 0,
+                            'images' => 0, 'current' => $record->pg_name, 'errors' => [],
+                        ], now()->addMinutes(10));
+
+                        ScrapeGalleryJob::dispatch($product->pd_id, $record->pg_id);
+                        $this->scrapeProgress = Cache::get("scrape_gallery_{$product->pd_id}");
+
+                        Notification::make()->title("Queued — scraping '{$record->pg_name}'")->success()->send();
                     }),
 
                 DeleteAction::make()

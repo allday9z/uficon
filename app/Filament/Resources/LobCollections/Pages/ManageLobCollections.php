@@ -11,11 +11,32 @@ use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ManageLobCollections extends ManageRecords
 {
     protected static string $resource = LobCollectionResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        return $this->processFamilyStripeUpload($data);
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        return $this->processFamilyStripeUpload($data);
+    }
+
+    private function processFamilyStripeUpload(array $data): array
+    {
+        // FileUpload moves file to disk before mutate runs — $data has relative path
+        if (! empty($data['ldc_stripe_image_file'])) {
+            $data['ldc_stripe_image'] = Storage::disk('public')->url($data['ldc_stripe_image_file']);
+        }
+        unset($data['ldc_stripe_image_file']);
+        return $data;
+    }
 
     protected function getHeaderActions(): array
     {
