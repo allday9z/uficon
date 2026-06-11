@@ -70,9 +70,21 @@ class ManageProductGalleries extends ManageRelatedRecords
                             $src = $get('pm_src') ?? '';
                             $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
                             if (in_array($ext, ['mp4', 'mov', 'webm'])) {
-                                return new HtmlString('<video src="' . e($src) . '" class="h-24 rounded" controls muted></video>');
+                                return new HtmlString('<video src="' . e($src) . '" class="h-12 rounded" controls muted></video>');
                             }
-                            return new HtmlString('<img src="' . e($src) . '" class="h-24 w-auto rounded object-contain bg-gray-100" loading="lazy" />');
+                            // Small thumbnail + absolute hover zoom
+                            return new HtmlString('
+<style>
+.gal-thumb-wrap{position:relative;display:inline-block;}
+.gal-thumb-wrap img.thumb{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #374151;cursor:zoom-in;transition:opacity .15s;}
+.gal-thumb-wrap:hover img.thumb{opacity:.7;}
+.gal-thumb-wrap .zoom{display:none;position:absolute;top:0;left:64px;z-index:9999;width:240px;height:240px;object-fit:contain;background:#111;border:2px solid #6b7280;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.7);}
+.gal-thumb-wrap:hover .zoom{display:block;}
+</style>
+<div class="gal-thumb-wrap">
+  <img class="thumb" src="' . e($src) . '" loading="lazy" />
+  <img class="zoom" src="' . e($src) . '" loading="lazy" />
+</div>');
                         }),
                     TextInput::make('pm_alt')->label('Alt text')->maxLength(200),
                     TextInput::make('pm_src')->label('URL')->disabled()->extraInputAttributes(['class' => 'text-xs text-gray-400']),
