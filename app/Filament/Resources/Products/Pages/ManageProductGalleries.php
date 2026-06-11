@@ -132,31 +132,35 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->reorderable()
                 ->deletable()
                 ->addable(false)
-                ->grid(1)
-                ->itemLabel(fn (array $state): string => '')
                 ->schema([
-                    \Filament\Schemas\Components\Grid::make(12)->schema([
-                        Placeholder::make('preview')
-                            ->label('')
-                            ->columnSpan(1)
-                            ->content(function ($get): HtmlString {
-                                $src = $get('pm_src') ?? '';
-                                $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
-                                if (in_array($ext, ['mp4', 'mov', 'webm'])) {
-                                    return new HtmlString('<div style="width:48px;height:48px;background:#1f2937;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af;">▶</div>');
-                                }
-                                return new HtmlString('
-<style>.gt{position:relative;display:inline-block;}.gt img.t{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #374151;cursor:zoom-in;}.gt:hover img.t{opacity:.7;}.gt .z{display:none;position:absolute;top:0;left:54px;z-index:9999;width:200px;height:200px;object-fit:contain;background:#111827;border:1px solid #6b7280;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.8);}.gt:hover .z{display:block;}</style>
-<div class="gt"><img class="t" src="' . e($src) . '" loading="lazy"/><img class="z" src="' . e($src) . '" loading="lazy"/></div>');
-                            }),
-                        TextInput::make('pm_alt')
-                            ->label('Alt')
-                            ->maxLength(200)
-                            ->columnSpan(6),
-                        TextInput::make('pm_id')->hidden(),
-                        TextInput::make('pm_position')->hidden(),
-                        TextInput::make('pm_src')->hidden(),
-                    ]),
+                    Placeholder::make('row')
+                        ->label('')
+                        ->columnSpanFull()
+                        ->content(function ($get): HtmlString {
+                            $src = $get('pm_src') ?? '';
+                            $alt = e($get('pm_alt') ?? '');
+                            $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+                            $thumb = in_array($ext, ['mp4', 'mov', 'webm'])
+                                ? '<div style="width:48px;height:48px;background:#1f2937;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af;">▶</div>'
+                                : '<div class="gt" style="position:relative;flex-shrink:0;">
+                                    <img class="t" src="' . e($src) . '" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;cursor:zoom-in;"/>
+                                    <img class="z" src="' . e($src) . '" loading="lazy" style="display:none;position:absolute;top:0;left:54px;z-index:9999;width:200px;height:200px;object-fit:contain;background:#111;border:1px solid #6b7280;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.8);"/>
+                                  </div>';
+                            $short = strlen($src) > 60 ? '…' . substr($src, -50) : $src;
+                            return new HtmlString('
+<style>.gt:hover .t{opacity:.7;}.gt:hover .z{display:block!important;}</style>
+<div style="display:flex;align-items:center;gap:10px;padding:2px 0;">
+  ' . $thumb . '
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:13px;font-weight:500;color:#f9fafb;">' . $alt . '</div>
+    <div style="font-size:11px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' . e($src) . '">' . e($short) . '</div>
+  </div>
+</div>');
+                        }),
+                    TextInput::make('pm_alt')->label('Alt text')->maxLength(200)->columnSpanFull(),
+                    TextInput::make('pm_id')->hidden(),
+                    TextInput::make('pm_position')->hidden(),
+                    TextInput::make('pm_src')->hidden(),
                 ])
                 ->afterStateHydrated(function ($component, $record) {
                     if (! $record) { $component->state([]); return; }
