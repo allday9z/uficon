@@ -165,13 +165,57 @@ class LobCollectionResource extends Resource
             Section::make('FamilyStripe Thumbnail')
                 ->columnSpanFull()
                 ->collapsed()
+                ->columns(2)
                 ->schema([
-                    TextInput::make('ldc_stripe_image')
-                        ->label('FamilyStripe Chip Image (URL)')
+                    Select::make('ldc_stripe_image')
+                        ->label('เลือกรูปจาก Gallery สี')
+                        ->columnSpanFull()
+                        ->searchable()
+                        ->placeholder('ว่าง = ใช้รูปแรกจาก defaultColor อัตโนมัติ')
+                        ->helperText('เลือกรูปจาก gallery สีของ product ใน sub-lob นี้')
+                        ->options(function (Get $get) {
+                            $subLob = $get('ldc_sub_lob');
+                            if (! $subLob) return [];
+                            return \App\Models\ProductMedia::query()
+                                ->join('product_gallery as g', 'g.pg_id', '=', 'product_media.pg_id')
+                                ->join('product as p', 'p.pd_id', '=', 'product_media.pd_id')
+                                ->where('p.pd_sub_lob', $subLob)
+                                ->where('product_media.pm_type', 'image')
+                                ->orderBy('g.pg_name')
+                                ->orderBy('product_media.pm_position')
+                                ->limit(100)
+                                ->get(['product_media.pm_src', 'g.pg_name', 'p.pd_primary_title'])
+                                ->mapWithKeys(fn ($m) => [
+                                    $m->pm_src => "[{$m->pd_primary_title}] {$m->pg_name}",
+                                ])
+                                ->toArray();
+                        })
+                        ->live()
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            // Preview thumbnail below select
+                        }),
+
+                    \Filament\Forms\Components\Placeholder::make('stripe_preview')
+                        ->label('Preview')
+                        ->columnSpanFull()
+                        ->content(function (Get $get): \Illuminate\Support\HtmlString {
+                            $src = $get('ldc_stripe_image') ?? '';
+                            if (! $src) return new \Illuminate\Support\HtmlString('<p class="text-sm text-gray-400">ยังไม่ได้เลือก</p>');
+                            return new \Illuminate\Support\HtmlString('<img src="' . e($src) . '" style="height:80px;border-radius:6px;object-fit:contain;background:#f5f5f7;" />');
+                        })
+                        ->visible(fn (Get $get) => filled($get('ldc_stripe_image'))),
+
+                    \Filament\Forms\Components\TextInput::make('ldc_stripe_image_url')
+                        ->label('หรือ ใส่ URL เอง')
                         ->maxLength(2000)
                         ->columnSpanFull()
                         ->placeholder('https://cdn.../stripe-thumb.png')
-                        ->helperText('รูปใน chip แถบบนสุดของ LOBPage'),
+                        ->helperText('ถ้าใส่ URL จะ override ตัวเลือกด้านบน')
+                        ->dehydrated(false)
+                        ->live()
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            if ($state) $set('ldc_stripe_image', $state);
+                        }),
                 ]),
 
             Section::make('การแสดงผล')
