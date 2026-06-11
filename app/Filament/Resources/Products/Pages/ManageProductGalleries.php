@@ -14,6 +14,7 @@ use Filament\Actions\EditAction;
 use Filament\Support\Icons\Heroicon;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRelatedRecords;
@@ -55,32 +56,35 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->maxLength(100)
                 ->columnSpanFull(),
 
-            // ── Existing images (Edit only) ───────────────────────────────
-            Placeholder::make('existing_images')
-                ->label('Current images')
+            // ── Existing images: sortable + deletable Repeater ────────────
+            Repeater::make('existing_media')
+                ->label('Current images (drag to sort, ✕ to delete)')
                 ->columnSpanFull()
-                ->content(function ($record): HtmlString {
-                    if (! $record) return new HtmlString('');
-                    $media = $record->media()->orderBy('pm_position')->get();
-                    if ($media->isEmpty()) return new HtmlString('<p class="text-sm text-gray-400">No images yet</p>');
-
-                    $html = '<div class="grid grid-cols-4 gap-2">';
-                    foreach ($media as $item) {
-                        $ext = strtolower(pathinfo($item->pm_src, PATHINFO_EXTENSION));
-                        if (in_array($ext, ['mp4', 'mov', 'webm'])) {
-                            $html .= '<div class="relative rounded overflow-hidden border border-gray-200 aspect-square flex items-center justify-center bg-gray-900">'
-                                . '<span class="text-white text-xs">▶ video</span>'
-                                . '</div>';
-                        } else {
-                            $html .= '<div class="relative rounded overflow-hidden border border-gray-200">'
-                                . '<img src="' . e($item->pm_src) . '" class="w-full aspect-square object-cover" loading="lazy" />'
-                                . '<span class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">' . e($item->pm_alt ?: basename($item->pm_src)) . '</span>'
-                                . '</div>';
-                        }
-                    }
-                    $html .= '</div>';
-                    $html .= '<p class="text-xs text-gray-400 mt-2">' . $media->count() . ' items total — ลบรายการได้ที่ปุ่ม action ใต้แต่ละรูป (coming soon)</p>';
-                    return new HtmlString($html);
+                ->reorderable()
+                ->deletable()
+                ->addable(false)
+                ->schema([
+                    Placeholder::make('preview')
+                        ->label('')
+                        ->content(function ($get): HtmlString {
+                            $src = $get('pm_src') ?? '';
+                            $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+                            if (in_array($ext, ['mp4', 'mov', 'webm'])) {
+                                return new HtmlString('<video src="' . e($src) . '" class="h-24 rounded" controls muted></video>');
+                            }
+                            return new HtmlString('<img src="' . e($src) . '" class="h-24 w-auto rounded object-contain bg-gray-100" loading="lazy" />');
+                        }),
+                    TextInput::make('pm_alt')->label('Alt text')->maxLength(200),
+                    TextInput::make('pm_src')->label('URL')->disabled()->extraInputAttributes(['class' => 'text-xs text-gray-400']),
+                    TextInput::make('pm_id')->hidden(),
+                    TextInput::make('pm_position')->hidden(),
+                ])
+                ->afterStateHydrated(function ($component, $record) {
+                    if (! $record) { $component->state([]); return; }
+                    $items = $record->media()->orderBy('pm_position')->get()
+                        ->map(fn ($m) => ['pm_id' => $m->pm_id, 'pm_src' => $m->pm_src, 'pm_alt' => $m->pm_alt, 'pm_position' => $m->pm_position])
+                        ->toArray();
+                    $component->state($items);
                 })
                 ->visible(fn ($record) => $record !== null),
 
@@ -153,6 +157,50 @@ class ManageProductGalleries extends ManageRelatedRecords
     }
 
     // ── Scraper ──────────────────────────────────────────────────────────
+
+    /** Scrape exactly ONE gallery (1 color) — stays under 30s limit */
+    private function scrapeOneGallery(\App\Models\Product $product, ProductGallery $gallery): int
+    {
+        $colorName = $gallery->pg_name;
+        $variant   = $product->variants->first(fn ($v) => $v->pv_option1 === $colorName)
+            ?? $product->variants->first();
+        if (! $variant?->pv_handle) return 0;
+
+        $url  = "https://www.istudio.store/products/{$variant->pv_handle}.json";
+        $ctx  = stream_context_create(['http' => ['timeout' => 8, 'header' => "User-Agent: Mozilla/5.0\r\n"]]);
+        $json = @file_get_contents($url, false, $ctx);
+        if (! $json) return 0;
+
+        $shopifyImages = json_decode($json, true)['product']['images'] ?? [];
+        if (empty($shopifyImages)) return 0;
+
+        ProductMedia::where('pd_id', $product->pd_id)
+            ->where('pg_id', $gallery->pg_id)
+            ->whereIn('pm_type', ['image', 'video'])
+            ->delete();
+
+        $dir      = "products/{$product->pd_handle}/{$gallery->pg_slug}";
+        $position = 1;
+        foreach ($shopifyImages as $img) {
+            $srcUrl   = $img['src'] ?? '';
+            if (! $srcUrl) continue;
+            $contents = @file_get_contents($srcUrl, false, $ctx);
+            if (! $contents) continue;
+            $ext      = pathinfo(parse_url($srcUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+            $filename = sprintf('%s/%03d.%s', $dir, $position, $ext);
+            Storage::disk('public')->put($filename, $contents);
+            ProductMedia::create([
+                'pd_id'       => $product->pd_id,
+                'pg_id'       => $gallery->pg_id,
+                'pm_src'      => Storage::disk('public')->url($filename),
+                'pm_type'     => 'image',
+                'pm_position' => $position,
+                'pm_alt'      => $colorName,
+            ]);
+            $position++;
+        }
+        return $position - 1;
+    }
 
     private function scrapeIstudioGalleries(\App\Models\Product $product): array
     {
@@ -256,10 +304,27 @@ class ManageProductGalleries extends ManageRelatedRecords
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        $images = $data['gallery_images'] ?? [];
-        unset($data['gallery_images']);
+        $images      = $data['gallery_images'] ?? [];
+        $mediaItems  = $data['existing_media'] ?? null; // from Repeater
+        unset($data['gallery_images'], $data['existing_media']);
 
         $record->update($data);
+
+        // Process existing media: delete removed items + update positions + alt
+        if ($mediaItems !== null) {
+            $keptIds = collect($mediaItems)->pluck('pm_id')->filter()->values()->toArray();
+            // Delete items that were removed from the repeater
+            ProductMedia::where('pg_id', $record->pg_id)->whereNotIn('pm_id', $keptIds)->delete();
+            // Update position + alt for remaining items
+            foreach ($mediaItems as $position => $item) {
+                if (! empty($item['pm_id'])) {
+                    ProductMedia::where('pm_id', $item['pm_id'])->update([
+                        'pm_position' => $position + 1,
+                        'pm_alt'      => $item['pm_alt'] ?? $record->pg_name,
+                    ]);
+                }
+            }
+        }
 
         if (! empty($images)) {
             $nextPosition = $record->media()->max('pm_position') + 1;
@@ -321,6 +386,25 @@ class ManageProductGalleries extends ManageRelatedRecords
             ])
             ->recordActions([
                 EditAction::make()->modalWidth('2xl'),
+
+                // Per-color scrape — runs 1 color only → no timeout
+                \Filament\Actions\Action::make('scrape_one')
+                    ->label('Scrape')
+                    ->icon(Heroicon::ArrowDownTray)
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (ProductGallery $record) => "Scrape '{$record->pg_name}' from istudio.store")
+                    ->action(function (ProductGallery $record) {
+                        try {
+                            $product = $this->getOwnerRecord();
+                            $product->loadMissing('variants');
+                            $count = $this->scrapeOneGallery($product, $record);
+                            Notification::make()->title("Scraped {$count} images for '{$record->pg_name}'")->success()->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()->title('Scrape failed: ' . $e->getMessage())->danger()->send();
+                        }
+                    }),
+
                 DeleteAction::make()
                     ->before(function (ProductGallery $record) {
                         $record->variants()->update(['pg_id' => null]);
