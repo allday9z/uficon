@@ -37,16 +37,25 @@ class ManageProductGalleries extends ManageRelatedRecords
     // Livewire polling state for scrape progress
     public ?array $scrapeProgress = null;
 
-    /** Called by Livewire wire:poll every 2s while scraping */
-    public function pollScrapeProgress(): void
+    /**
+     * Read fresh progress from Cache on every Livewire render cycle.
+     * Called directly from ->description() closure so each poll gets live data.
+     */
+    private function refreshScrapeProgress(): void
     {
         $product = $this->getOwnerRecord();
         if (! $product) return;
         $key  = "scrape_gallery_{$product->pd_id}";
         $data = Cache::get($key);
+
+        if (! $data) {
+            $this->scrapeProgress = null;
+            return;
+        }
+
         $this->scrapeProgress = $data;
 
-        if ($data && ($data['status'] ?? '') === 'done') {
+        if (($data['status'] ?? '') === 'done') {
             Notification::make()
                 ->title("✅ Scrape complete — {$data['done']} colors, {$data['images']} images")
                 ->success()
@@ -56,15 +65,12 @@ class ManageProductGalleries extends ManageRelatedRecords
         }
     }
 
-    /** Livewire polling — active only when scraping */
-    protected function getListeners(): array
-    {
-        return ['$refresh' => '$refresh'];
-    }
-
+    /** Polling active while cache key exists — checked every render */
     public function getPollingInterval(): ?string
     {
-        return $this->scrapeProgress !== null ? '2000ms' : null;
+        $product = $this->getOwnerRecord();
+        if (! $product) return null;
+        return Cache::has("scrape_gallery_{$product->pd_id}") ? '2000ms' : null;
     }
 
     private function scrapeProgressHtml(): HtmlString
@@ -84,19 +90,19 @@ class ManageProductGalleries extends ManageRelatedRecords
             return new HtmlString('<div style="margin:12px 0;padding:12px 16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;">❌ Scrape failed: ' . e($p['error'] ?? '') . '</div>');
         }
 
-        $html  = '<div style="margin:12px 0 16px;font-family:system-ui,sans-serif;">';
-        $html .= '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-        $html .= '<span style="font-size:13px;font-weight:600;color:#1d1d1f;">⬇ Scraping galleries…</span>';
-        $html .= '<span style="font-size:12px;color:#6e6e73;">' . $done . ' / ' . $total . ' colors • ' . $images . ' images</span>';
+        $html  = '<div style="margin:10px 0 14px;font-family:system-ui,sans-serif;">';
+        $html .= '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">';
+        $html .= '<span style="font-size:13px;font-weight:600;color:#f5f5f7;">⬇ Scraping galleries…</span>';
+        $html .= '<span style="font-size:12px;color:#aeaeb2;">' . $done . ' / ' . $total . ' colors&nbsp;&bull;&nbsp;' . $images . ' images</span>';
         $html .= '</div>';
-        $html .= '<div style="background:#e5e5ea;border-radius:100px;height:8px;overflow:hidden;">';
-        $html .= '<div style="background:' . $color . ';height:100%;width:' . $pct . '%;border-radius:100px;transition:width .4s ease;"></div>';
+        $html .= '<div style="background:#3a3a3c;border-radius:100px;height:7px;overflow:hidden;">';
+        $html .= '<div style="background:' . $color . ';height:100%;width:' . $pct . '%;border-radius:100px;transition:width .5s ease;min-width:' . ($pct > 0 ? '0' : '6px') . ';"></div>';
         $html .= '</div>';
         if ($current) {
-            $html .= '<div style="margin-top:6px;font-size:12px;color:#6e6e73;">Currently: <strong style="color:#1d1d1f;">' . $current . '</strong></div>';
+            $html .= '<div style="margin-top:6px;font-size:12px;color:#8e8e93;">Currently: <strong style="color:#e5e5ea;font-weight:500;">' . $current . '</strong></div>';
         }
         if (! empty($errors)) {
-            $html .= '<div style="margin-top:6px;font-size:11px;color:#ef4444;">⚠ ' . count($errors) . ' error(s)</div>';
+            $html .= '<div style="margin-top:5px;font-size:11px;color:#ff6b6b;">⚠ ' . count($errors) . ' error(s)</div>';
         }
         $html .= '</div>';
 
@@ -326,7 +332,10 @@ class ManageProductGalleries extends ManageRelatedRecords
                     ->sortable(),
             ])
             ->defaultSort('pg_position')
-            ->description(fn (): HtmlString => $this->scrapeProgress ? $this->scrapeProgressHtml() : new HtmlString(''))
+            ->description(function (): HtmlString {
+                $this->refreshScrapeProgress(); // reads fresh data from Cache every render cycle
+                return $this->scrapeProgress ? $this->scrapeProgressHtml() : new HtmlString('');
+            })
             ->headerActions([
                 CreateAction::make()
                     ->label('+ New gallery')
