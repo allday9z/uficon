@@ -29,7 +29,8 @@ class ScrapeGalleryJob implements ShouldQueue
     ];
 
     public function __construct(
-        public readonly int $productId,
+        public readonly int  $productId,
+        public readonly ?int $galleryId = null,
     ) {
         $this->cacheKey = "scrape_gallery_{$productId}";
     }
@@ -42,6 +43,27 @@ class ScrapeGalleryJob implements ShouldQueue
             return;
         }
 
+        // ── Single-gallery mode ──────────────────────────────────────────
+        if ($this->galleryId !== null) {
+            $gallery = ProductGallery::find($this->galleryId);
+            if (! $gallery) {
+                $this->setProgress(['status' => 'failed', 'error' => 'Gallery not found']);
+                return;
+            }
+            $variant = $product->variants->first(fn ($v) => $v->pv_option1 === $gallery->pg_name)
+                ?? $product->variants->whereNotNull('pv_handle')->first();
+            if (! $variant) {
+                $this->setProgress(['status' => 'failed', 'error' => 'No variant found for ' . $gallery->pg_name]);
+                return;
+            }
+
+            $this->setProgress(['status' => 'processing', 'total' => 1, 'done' => 0, 'images' => 0, 'current' => $gallery->pg_name, 'errors' => []]);
+            $count = $this->scrapeIntoGallery($product, $gallery, $variant);
+            $this->setProgress(['status' => 'done', 'total' => 1, 'done' => 1, 'images' => $count, 'errors' => []]);
+            return;
+        }
+
+        // ── All-colors mode ──────────────────────────────────────────────
         $variants  = $product->variants;
         $colors    = $variants->whereNotNull('pv_option1')->unique('pv_option1')->values();
         $total     = $colors->count();
@@ -56,8 +78,12 @@ class ScrapeGalleryJob implements ShouldQueue
             $this->setProgress(['status' => 'processing', 'total' => $total, 'done' => $done, 'images' => $images, 'current' => $colorName]);
 
             try {
-                $count = $this->scrapeOneColor($product, $variant, $colorName);
-                $images += $count;
+                $gallerySlug = Str::slug($colorName) ?: 'color-' . substr(md5($colorName), 0, 8);
+                $gallery = ProductGallery::firstOrCreate(
+                    ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
+                    ['pg_name' => $colorName, 'pg_position' => 0]
+                );
+                $images += $this->scrapeIntoGallery($product, $gallery, $variant);
             } catch (\Throwable $e) {
                 $errors[] = "{$colorName}: " . $e->getMessage();
             }
@@ -69,47 +95,35 @@ class ScrapeGalleryJob implements ShouldQueue
         $this->setProgress(['status' => 'done', 'total' => $total, 'done' => $done, 'images' => $images, 'errors' => $errors]);
     }
 
-    private function scrapeOneColor(Product $product, $variant, string $colorName): int
+    private function scrapeIntoGallery(Product $product, ProductGallery $gallery, $variant): int
     {
-        $handle  = $variant->pv_handle;
-        $shopifyImages = $this->fetchImages($handle);
-
+        $shopifyImages = $this->fetchImages($variant->pv_handle);
         if (empty($shopifyImages)) return 0;
 
-        $gallerySlug = Str::slug($colorName) ?: 'color-' . substr(md5($colorName), 0, 8);
-        $gallery = ProductGallery::firstOrCreate(
-            ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
-            ['pg_name' => $colorName, 'pg_position' => 0]
-        );
-
-        // Delete existing gallery images
         ProductMedia::where('pd_id', $product->pd_id)
             ->where('pg_id', $gallery->pg_id)
             ->whereIn('pm_type', ['image', 'video'])
             ->delete();
 
-        $dir      = "products/{$product->pd_handle}/{$gallerySlug}";
+        $dir      = "products/{$product->pd_handle}/{$gallery->pg_slug}";
         $ctx      = $this->httpContext();
         $position = 1;
 
         foreach ($shopifyImages as $img) {
-            $srcUrl   = $img['src'] ?? '';
+            $srcUrl = $img['src'] ?? '';
             if (! $srcUrl) continue;
-
             $contents = @file_get_contents($srcUrl, false, $ctx);
             if (! $contents) continue;
-
             $ext      = pathinfo(parse_url($srcUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
             $filename = sprintf('%s/%03d.%s', $dir, $position, $ext);
             Storage::disk('public')->put($filename, $contents);
-
             ProductMedia::create([
                 'pd_id'       => $product->pd_id,
                 'pg_id'       => $gallery->pg_id,
                 'pm_src'      => Storage::disk('public')->url($filename),
                 'pm_type'     => 'image',
                 'pm_position' => $position,
-                'pm_alt'      => $colorName,
+                'pm_alt'      => $gallery->pg_name,
             ]);
             $position++;
         }

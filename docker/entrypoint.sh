@@ -7,7 +7,10 @@ mkdir -p storage/logs \
          storage/framework/sessions \
          storage/framework/views \
          storage/framework/cache \
-         bootstrap/cache
+         bootstrap/cache \
+         storage/app/public/products/galleries \
+         storage/app/public/lob/stripe-thumbnails \
+         storage/app/public/products
 chown -R www-data:www-data storage bootstrap/cache
 
 # Clear any stale cached config before re-caching (prevents false realpath issue)
