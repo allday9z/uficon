@@ -13,6 +13,9 @@ chown -R www-data:www-data storage bootstrap/cache
 # Clear any stale cached config before re-caching (prevents false realpath issue)
 php artisan config:clear 2>/dev/null || true
 
+# Storage symlink (public/storage → storage/app/public)
+php artisan storage:link --force 2>/dev/null || true
+
 # Run DB migrations
 php artisan migrate --force
 php artisan db:seed --class=UserSeeder --force
