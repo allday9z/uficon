@@ -21,9 +21,12 @@ class ProductListResource extends JsonResource
 
         // Deterministic Representative Image: use defaultColor gallery
         // defaultColor = cheapest available variant's gallery (pg_id)
-        $defaultGallery = $cheapestVariant?->pg_id
-            ? $this->galleries->firstWhere('pg_id', $cheapestVariant->pg_id)
-            : $this->galleries->first();
+        // pd_stripe_gallery_id = admin override; NULL = auto (cheapest variant)
+        $defaultGallery = $this->pd_stripe_gallery_id
+            ? $this->galleries->firstWhere('pg_id', $this->pd_stripe_gallery_id)
+            : ($cheapestVariant?->pg_id
+                ? $this->galleries->firstWhere('pg_id', $cheapestVariant->pg_id)
+                : $this->galleries->first());
 
         $firstImage = $defaultGallery?->media
             ->where('pm_type', 'image')
