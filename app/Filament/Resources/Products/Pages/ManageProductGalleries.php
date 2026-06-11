@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Pages;
 
 use App\Filament\Resources\Products\ProductResource;
+use App\Jobs\ScrapeGalleryJob;
 use App\Models\Product;
 use App\Models\ProductGallery;
 use App\Models\ProductMedia;
@@ -22,6 +23,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
@@ -29,10 +31,77 @@ use Illuminate\Support\Str;
 class ManageProductGalleries extends ManageRelatedRecords
 {
     protected static string $resource = ProductResource::class;
-
     protected static string $relationship = 'galleries';
-
     protected static ?string $navigationLabel = 'Galleries';
+
+    // Livewire polling state for scrape progress
+    public ?array $scrapeProgress = null;
+
+    /** Called by Livewire wire:poll every 2s while scraping */
+    public function pollScrapeProgress(): void
+    {
+        $product = $this->getOwnerRecord();
+        if (! $product) return;
+        $key  = "scrape_gallery_{$product->pd_id}";
+        $data = Cache::get($key);
+        $this->scrapeProgress = $data;
+
+        if ($data && ($data['status'] ?? '') === 'done') {
+            Notification::make()
+                ->title("✅ Scrape complete — {$data['done']} colors, {$data['images']} images")
+                ->success()
+                ->send();
+            Cache::forget($key);
+            $this->scrapeProgress = null;
+        }
+    }
+
+    /** Livewire polling — active only when scraping */
+    protected function getListeners(): array
+    {
+        return ['$refresh' => '$refresh'];
+    }
+
+    public function getPollingInterval(): ?string
+    {
+        return $this->scrapeProgress !== null ? '2000ms' : null;
+    }
+
+    private function scrapeProgressHtml(): HtmlString
+    {
+        if (! $this->scrapeProgress) return new HtmlString('');
+        $p      = $this->scrapeProgress;
+        $status = $p['status'] ?? 'processing';
+        $total  = max($p['total'] ?? 1, 1);
+        $done   = $p['done'] ?? 0;
+        $pct    = (int) round($done / $total * 100);
+        $color  = $status === 'failed' ? '#ef4444' : '#0071e3';
+        $current = e($p['current'] ?? '');
+        $images  = $p['images'] ?? 0;
+        $errors  = $p['errors'] ?? [];
+
+        if ($status === 'failed') {
+            return new HtmlString('<div style="margin:12px 0;padding:12px 16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;">❌ Scrape failed: ' . e($p['error'] ?? '') . '</div>');
+        }
+
+        $html  = '<div style="margin:12px 0 16px;font-family:system-ui,sans-serif;">';
+        $html .= '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        $html .= '<span style="font-size:13px;font-weight:600;color:#1d1d1f;">⬇ Scraping galleries…</span>';
+        $html .= '<span style="font-size:12px;color:#6e6e73;">' . $done . ' / ' . $total . ' colors • ' . $images . ' images</span>';
+        $html .= '</div>';
+        $html .= '<div style="background:#e5e5ea;border-radius:100px;height:8px;overflow:hidden;">';
+        $html .= '<div style="background:' . $color . ';height:100%;width:' . $pct . '%;border-radius:100px;transition:width .4s ease;"></div>';
+        $html .= '</div>';
+        if ($current) {
+            $html .= '<div style="margin-top:6px;font-size:12px;color:#6e6e73;">Currently: <strong style="color:#1d1d1f;">' . $current . '</strong></div>';
+        }
+        if (! empty($errors)) {
+            $html .= '<div style="margin-top:6px;font-size:11px;color:#ef4444;">⚠ ' . count($errors) . ' error(s)</div>';
+        }
+        $html .= '</div>';
+
+        return new HtmlString($html);
+    }
 
     public function form(Schema $schema): Schema
     {
@@ -122,48 +191,30 @@ class ManageProductGalleries extends ManageRelatedRecords
     {
         return [
             Action::make('scrape_istudio')
-                ->label('Scrape from istudio.store')
+                ->label('Scrape all colors')
                 ->icon(Heroicon::ArrowDownTray)
-                ->color('gray')
+                ->color('warning')
                 ->requiresConfirmation()
-                ->modalHeading('Scrape gallery images from istudio.store')
-                ->modalDescription('ดึงรูปจาก istudio.store/{pv_handle}.json → download เก็บ local storage → สร้าง/อัปเดต gallery + media records')
+                ->modalHeading('Scrape galleries for all colors')
+                ->modalDescription('ดาวน์โหลดรูปทุกสีใน background (สูงสุด 5 นาที) — try istudio.store → istudiobyspvi.com fallback — ProgressBar จะแสดงขณะทำงาน')
                 ->action(function () {
-                    try {
-                        /** @var \App\Models\Product $product */
-                        $product = $this->getOwnerRecord();
+                    $product = $this->getOwnerRecord();
+                    if (! $product) { Notification::make()->title('Product not found')->danger()->send(); return; }
+                    $product->loadMissing('variants');
+                    if ($product->variants->isEmpty()) { Notification::make()->title('No variants found')->warning()->send(); return; }
 
-                        if (! $product) {
-                            Notification::make()->title('Error: product not found')->danger()->send();
-                            return;
-                        }
+                    $colorCount = $product->variants->whereNotNull('pv_option1')->unique('pv_option1')->count();
 
-                        $product->loadMissing('variants');
+                    // Init cache progress before dispatching
+                    Cache::put("scrape_gallery_{$product->pd_id}", [
+                        'status' => 'processing', 'total' => $colorCount,
+                        'done' => 0, 'images' => 0, 'current' => 'กำลังเริ่ม…', 'errors' => [],
+                    ], now()->addMinutes(10));
 
-                        if ($product->variants->isEmpty()) {
-                            Notification::make()->title('No variants found — cannot scrape')->warning()->send();
-                            return;
-                        }
+                    ScrapeGalleryJob::dispatch($product->pd_id);
+                    $this->scrapeProgress = Cache::get("scrape_gallery_{$product->pd_id}");
 
-                        $results = $this->scrapeIstudioGalleries($product);
-
-                        if ($results['galleries'] === 0) {
-                            Notification::make()
-                                ->title('Scrape complete — 0 galleries found (variants may not have pv_handle or istudio.store returned no images)')
-                                ->warning()
-                                ->send();
-                        } else {
-                            Notification::make()
-                                ->title("Scraped {$results['galleries']} galleries, {$results['images']} images — stored locally")
-                                ->success()
-                                ->send();
-                        }
-                    } catch (\Throwable $e) {
-                        Notification::make()
-                            ->title('Scrape failed: ' . $e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
+                    Notification::make()->title("Started — {$colorCount} colors queued for scraping")->success()->send();
                 }),
         ];
     }
@@ -393,6 +444,7 @@ class ManageProductGalleries extends ManageRelatedRecords
                     ->sortable(),
             ])
             ->defaultSort('pg_position')
+            ->description(fn (): HtmlString => $this->scrapeProgress ? $this->scrapeProgressHtml() : new HtmlString(''))
             ->headerActions([
                 CreateAction::make()->label('+ New gallery')->modalWidth('2xl'),
             ])
@@ -405,7 +457,7 @@ class ManageProductGalleries extends ManageRelatedRecords
                     ->icon(Heroicon::ArrowDownTray)
                     ->color('gray')
                     ->requiresConfirmation()
-                    ->modalHeading(fn (ProductGallery $record) => "Scrape '{$record->pg_name}' from istudio.store")
+                    ->modalHeading(fn (ProductGallery $record) => "Scrape '{$record->pg_name}'")
                     ->action(function (ProductGallery $record) {
                         try {
                             $product = $this->getOwnerRecord();
