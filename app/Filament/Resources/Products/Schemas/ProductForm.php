@@ -987,6 +987,21 @@ class ProductForm
                                     })
                                     ->placeholder('No badge'),
 
+                                Select::make('pd_stripe_gallery_id')
+                                    ->label('FamilyStripe color (thumbnail)')
+                                    ->placeholder('Auto (cheapest variant color)')
+                                    ->helperText('เลือกสีที่จะแสดงใน FamilyStripe chip — ถ้าว่างใช้สีถูกสุดอัตโนมัติ')
+                                    ->nullable()
+                                    ->native(false)
+                                    ->options(function ($record) {
+                                        if (! $record) return [];
+                                        return \App\Models\ProductGallery::where('pd_id', $record->pd_id)
+                                            ->orderBy('pg_name')
+                                            ->pluck('pg_name', 'pg_id')
+                                            ->toArray();
+                                    })
+                                    ->visible(fn ($record) => $record !== null),
+
                                 Select::make('pd_template_type')
                                     ->label('Frontend template')
                                     ->options([
