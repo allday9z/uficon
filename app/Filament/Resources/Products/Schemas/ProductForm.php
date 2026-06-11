@@ -965,15 +965,26 @@ class ProductForm
 
                                 Select::make('pd_badge')
                                     ->label('Badge')
-                                    ->options([
-                                        'new'       => '🆕 New',
-                                        'hot'       => '🔥 Hot',
-                                        'sale'      => '💸 Sale',
-                                        'pre_order' => '📦 Pre-order',
-                                        'best_seller' => '⭐ Best Seller',
-                                    ])
+                                    ->options(fn () => \App\Models\BadgePreset::where('bp_is_active', true)
+                                        ->orderBy('bp_sort_order')
+                                        ->pluck('bp_text', 'bp_text')
+                                        ->toArray()
+                                    )
                                     ->nullable()
-                                    ->native(false)
+                                    ->searchable()
+                                    ->createOptionForm([
+                                        \Filament\Forms\Components\TextInput::make('bp_text')->label('Badge text')->required(),
+                                        \Filament\Forms\Components\ColorPicker::make('bp_hex_color')->label('Color')->default('#BF4800'),
+                                    ])
+                                    ->createOptionUsing(function (array $data) {
+                                        $preset = \App\Models\BadgePreset::create([
+                                            'bp_text'      => $data['bp_text'],
+                                            'bp_hex_color' => $data['bp_hex_color'] ?? '#BF4800',
+                                            'bp_sort_order'=> 99,
+                                            'bp_is_active' => true,
+                                        ]);
+                                        return $preset->bp_text;
+                                    })
                                     ->placeholder('No badge'),
 
                                 Select::make('pd_template_type')
