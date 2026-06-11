@@ -48,6 +48,9 @@ class ProductListResource extends JsonResource
                 'currency' => 'THB',
             ],
             'templateType' => $this->pd_template_type ?? 'simple',
+            'badgeHex'     => $this->pd_badge
+                ? (\App\Models\BadgePreset::where('bp_text', $this->pd_badge)->value('bp_hex_color') ?? '#BF4800')
+                : null,
             'category'     => $this->collection?->pcol_handle,
             'collection'   => $this->collection?->pcol_handle,
         ];
