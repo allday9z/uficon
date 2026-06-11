@@ -132,33 +132,31 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->reorderable()
                 ->deletable()
                 ->addable(false)
+                ->grid(1)
+                ->itemLabel(fn (array $state): string => '')
                 ->schema([
-                    Placeholder::make('preview')
-                        ->label('')
-                        ->content(function ($get): HtmlString {
-                            $src = $get('pm_src') ?? '';
-                            $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
-                            if (in_array($ext, ['mp4', 'mov', 'webm'])) {
-                                return new HtmlString('<video src="' . e($src) . '" class="h-12 rounded" controls muted></video>');
-                            }
-                            // Small thumbnail + absolute hover zoom
-                            return new HtmlString('
-<style>
-.gal-thumb-wrap{position:relative;display:inline-block;}
-.gal-thumb-wrap img.thumb{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #374151;cursor:zoom-in;transition:opacity .15s;}
-.gal-thumb-wrap:hover img.thumb{opacity:.7;}
-.gal-thumb-wrap .zoom{display:none;position:absolute;top:0;left:64px;z-index:9999;width:240px;height:240px;object-fit:contain;background:#111;border:2px solid #6b7280;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.7);}
-.gal-thumb-wrap:hover .zoom{display:block;}
-</style>
-<div class="gal-thumb-wrap">
-  <img class="thumb" src="' . e($src) . '" loading="lazy" />
-  <img class="zoom" src="' . e($src) . '" loading="lazy" />
-</div>');
-                        }),
-                    TextInput::make('pm_alt')->label('Alt text')->maxLength(200),
-                    TextInput::make('pm_src')->label('URL')->disabled()->extraInputAttributes(['class' => 'text-xs text-gray-400']),
-                    TextInput::make('pm_id')->hidden(),
-                    TextInput::make('pm_position')->hidden(),
+                    \Filament\Schemas\Components\Grid::make(12)->schema([
+                        Placeholder::make('preview')
+                            ->label('')
+                            ->columnSpan(1)
+                            ->content(function ($get): HtmlString {
+                                $src = $get('pm_src') ?? '';
+                                $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+                                if (in_array($ext, ['mp4', 'mov', 'webm'])) {
+                                    return new HtmlString('<div style="width:48px;height:48px;background:#1f2937;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af;">▶</div>');
+                                }
+                                return new HtmlString('
+<style>.gt{position:relative;display:inline-block;}.gt img.t{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #374151;cursor:zoom-in;}.gt:hover img.t{opacity:.7;}.gt .z{display:none;position:absolute;top:0;left:54px;z-index:9999;width:200px;height:200px;object-fit:contain;background:#111827;border:1px solid #6b7280;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.8);}.gt:hover .z{display:block;}</style>
+<div class="gt"><img class="t" src="' . e($src) . '" loading="lazy"/><img class="z" src="' . e($src) . '" loading="lazy"/></div>');
+                            }),
+                        TextInput::make('pm_alt')
+                            ->label('Alt')
+                            ->maxLength(200)
+                            ->columnSpan(6),
+                        TextInput::make('pm_id')->hidden(),
+                        TextInput::make('pm_position')->hidden(),
+                        TextInput::make('pm_src')->hidden(),
+                    ]),
                 ])
                 ->afterStateHydrated(function ($component, $record) {
                     if (! $record) { $component->state([]); return; }
@@ -376,8 +374,10 @@ class ManageProductGalleries extends ManageRelatedRecords
         // Process existing media: delete removed items + update positions + alt
         if ($mediaItems !== null) {
             $keptIds = collect($mediaItems)->pluck('pm_id')->filter()->values()->toArray();
-            // Delete items that were removed from the repeater
-            ProductMedia::where('pg_id', $record->pg_id)->whereNotIn('pm_id', $keptIds)->delete();
+            // Only delete if we have explicit IDs to keep — guard against empty array deleting all
+            if (! empty($keptIds)) {
+                ProductMedia::where('pg_id', $record->pg_id)->whereNotIn('pm_id', $keptIds)->delete();
+            }
             // Update position + alt for remaining items
             foreach ($mediaItems as $position => $item) {
                 if (! empty($item['pm_id'])) {
