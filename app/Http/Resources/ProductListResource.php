@@ -21,9 +21,12 @@ class ProductListResource extends JsonResource
 
         // Deterministic Representative Image: use defaultColor gallery
         // defaultColor = cheapest available variant's gallery (pg_id)
-        $defaultGallery = $cheapestVariant?->pg_id
-            ? $this->galleries->firstWhere('pg_id', $cheapestVariant->pg_id)
-            : $this->galleries->first();
+        // pd_stripe_gallery_id = admin override; NULL = auto (cheapest variant)
+        $defaultGallery = $this->pd_stripe_gallery_id
+            ? $this->galleries->firstWhere('pg_id', $this->pd_stripe_gallery_id)
+            : ($cheapestVariant?->pg_id
+                ? $this->galleries->firstWhere('pg_id', $cheapestVariant->pg_id)
+                : $this->galleries->first());
 
         $firstImage = $defaultGallery?->media
             ->where('pm_type', 'image')
@@ -48,6 +51,9 @@ class ProductListResource extends JsonResource
                 'currency' => 'THB',
             ],
             'templateType' => $this->pd_template_type ?? 'simple',
+            'badgeHex'     => $this->pd_badge
+                ? (\App\Models\BadgePreset::where('bp_text', $this->pd_badge)->value('bp_hex_color') ?? '#BF4800')
+                : null,
             'category'     => $this->collection?->pcol_handle,
             'collection'   => $this->collection?->pcol_handle,
         ];

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class ProductGallery extends Model
 {
@@ -17,6 +18,16 @@ class ProductGallery extends Model
         'pg_slug',
         'pg_position',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $model) {
+            if (empty($model->pg_slug)) {
+                $base = $model->pg_name ?? '';
+                $model->pg_slug = Str::slug($base) ?: 'gallery-' . substr(md5($base . uniqid()), 0, 8);
+            }
+        });
+    }
 
     protected $casts = [
         'pg_position' => 'integer',

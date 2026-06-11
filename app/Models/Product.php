@@ -41,6 +41,7 @@ class Product extends Model
         'compare_at_price',
         'pd_status',
         'pd_badge',
+        'pd_stripe_gallery_id',
         'published_at',
         'shopify_product_id',
     ];

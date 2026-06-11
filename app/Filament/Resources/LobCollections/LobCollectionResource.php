@@ -11,9 +11,11 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Illuminate\Support\Facades\Storage;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -166,12 +168,75 @@ class LobCollectionResource extends Resource
                 ->columnSpanFull()
                 ->collapsed()
                 ->schema([
-                    TextInput::make('ldc_stripe_image')
-                        ->label('FamilyStripe Chip Image (URL)')
+                    // ── actual stored field — Hidden so no option validation ──
+                    \Filament\Forms\Components\Hidden::make('ldc_stripe_image'),
+
+                    // ① pick from gallery (dehydrated:false — sets Hidden field above)
+                    Select::make('ldc_gallery_pick')
+                        ->label('① เลือกรูปจาก Gallery สี')
+                        ->columnSpanFull()
+                        ->searchable()
+                        ->dehydrated(false)
+                        ->placeholder('ว่าง = ใช้รูปแรกจาก defaultColor อัตโนมัติ')
+                        ->helperText('เลือกรูปจาก gallery สีของ product ใน sub-lob นี้')
+                        ->options(function (Get $get) {
+                            $subLob = $get('ldc_sub_lob');
+                            if (! $subLob) return [];
+                            return \App\Models\ProductMedia::query()
+                                ->join('product_gallery as g', 'g.pg_id', '=', 'product_media.pg_id')
+                                ->join('product as p', 'p.pd_id', '=', 'product_media.pd_id')
+                                ->where('p.pd_sub_lob', $subLob)
+                                ->where('product_media.pm_type', 'image')
+                                ->orderBy('p.pd_primary_title')
+                                ->orderBy('g.pg_name')
+                                ->orderBy('product_media.pm_position')
+                                ->limit(150)
+                                ->get(['product_media.pm_src', 'product_media.pm_position', 'g.pg_name', 'p.pd_primary_title'])
+                                ->mapWithKeys(fn ($m) => [
+                                    $m->pm_src => "[{$m->pd_primary_title}] {$m->pg_name} — รูป #{$m->pm_position}",
+                                ])
+                                ->toArray();
+                        })
+                        ->live()
+                        ->afterStateUpdated(fn ($state, callable $set) => $set('ldc_stripe_image', $state)),
+
+                    // ② upload — NOT dehydrated(false) so Filament moves file on save
+                    // path → URL conversion handled in mutateFormDataBefore* on page class
+                    FileUpload::make('ldc_stripe_image_file')
+                        ->label('② อัพโหลดรูปเอง')
+                        ->columnSpanFull()
+                        ->disk('public')
+                        ->directory('lob/stripe-thumbnails')
+                        ->image()
+                        ->imagePreviewHeight('100')
+                        ->maxSize(5120)
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'])
+                        ->helperText('JPG · PNG · WebP · AVIF — max 5MB — จะ override ①'),
+
+                    // ③ CDN URL (dehydrated:false — sets Hidden field above)
+                    TextInput::make('ldc_stripe_image_url')
+                        ->label('③ หรือ ใส่ CDN URL เอง')
                         ->maxLength(2000)
                         ->columnSpanFull()
                         ->placeholder('https://cdn.../stripe-thumb.png')
-                        ->helperText('รูปใน chip แถบบนสุดของ LOBPage'),
+                        ->helperText('จะ override ① และ ②')
+                        ->dehydrated(false)
+                        ->live()
+                        ->afterStateUpdated(fn ($state, callable $set) => $set('ldc_stripe_image', $state ?: null)),
+
+                    \Filament\Forms\Components\Placeholder::make('stripe_preview')
+                        ->label('Preview รูปปัจจุบัน')
+                        ->columnSpanFull()
+                        ->content(function (Get $get): \Illuminate\Support\HtmlString {
+                            $src = $get('ldc_stripe_image') ?? '';
+                            if (! $src) return new \Illuminate\Support\HtmlString('<p style="font-size:12px;color:#6b7280;">ยังไม่ได้เลือก</p>');
+                            $filename = basename(parse_url($src, PHP_URL_PATH));
+                            return new \Illuminate\Support\HtmlString('
+<div style="display:flex;align-items:center;gap:14px;padding:8px 12px;background:#1c1c1e;border:1px solid #374151;border-radius:10px;">
+  <img src="' . e($src) . '" style="height:100px;width:auto;max-width:180px;border-radius:8px;object-fit:contain;background:#2c2c2e;flex-shrink:0;" />
+  <div style="font-size:12px;color:#9ca3af;word-break:break-all;">' . e($filename) . '</div>
+</div>');
+                        }),
                 ]),
 
             Section::make('การแสดงผล')

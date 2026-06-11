@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Pages;
 
 use App\Filament\Resources\Products\ProductResource;
+use App\Jobs\ScrapeGalleryJob;
 use App\Models\Product;
 use App\Models\ProductGallery;
 use App\Models\ProductMedia;
@@ -13,7 +14,9 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Support\Icons\Heroicon;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRelatedRecords;
@@ -21,17 +24,90 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
-use Illuminate\Support\Str;
 
 class ManageProductGalleries extends ManageRelatedRecords
 {
     protected static string $resource = ProductResource::class;
-
     protected static string $relationship = 'galleries';
-
     protected static ?string $navigationLabel = 'Galleries';
+
+    // Livewire polling state for scrape progress
+    public ?array $scrapeProgress = null;
+
+    /**
+     * Read fresh progress from Cache on every Livewire render cycle.
+     * Called directly from ->description() closure so each poll gets live data.
+     */
+    private function refreshScrapeProgress(): void
+    {
+        $product = $this->getOwnerRecord();
+        if (! $product) return;
+        $key  = "scrape_gallery_{$product->pd_id}";
+        $data = Cache::get($key);
+
+        if (! $data) {
+            $this->scrapeProgress = null;
+            return;
+        }
+
+        $this->scrapeProgress = $data;
+
+        if (($data['status'] ?? '') === 'done') {
+            Notification::make()
+                ->title("✅ Scrape complete — {$data['done']} colors, {$data['images']} images")
+                ->success()
+                ->send();
+            Cache::forget($key);
+            $this->scrapeProgress = null;
+        }
+    }
+
+    /** Polling active while cache key exists — checked every render */
+    public function getPollingInterval(): ?string
+    {
+        $product = $this->getOwnerRecord();
+        if (! $product) return null;
+        return Cache::has("scrape_gallery_{$product->pd_id}") ? '2000ms' : null;
+    }
+
+    private function scrapeProgressHtml(): HtmlString
+    {
+        if (! $this->scrapeProgress) return new HtmlString('');
+        $p      = $this->scrapeProgress;
+        $status = $p['status'] ?? 'processing';
+        $total  = max($p['total'] ?? 1, 1);
+        $done   = $p['done'] ?? 0;
+        $pct    = (int) round($done / $total * 100);
+        $color  = $status === 'failed' ? '#ef4444' : '#0071e3';
+        $current = e($p['current'] ?? '');
+        $images  = $p['images'] ?? 0;
+        $errors  = $p['errors'] ?? [];
+
+        if ($status === 'failed') {
+            return new HtmlString('<div style="margin:12px 0;padding:12px 16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#991b1b;">❌ Scrape failed: ' . e($p['error'] ?? '') . '</div>');
+        }
+
+        $html  = '<div style="margin:10px 0 14px;font-family:system-ui,sans-serif;">';
+        $html .= '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">';
+        $html .= '<span style="font-size:13px;font-weight:600;color:#f5f5f7;">⬇ Scraping galleries…</span>';
+        $html .= '<span style="font-size:12px;color:#aeaeb2;">' . $done . ' / ' . $total . ' colors&nbsp;&bull;&nbsp;' . $images . ' images</span>';
+        $html .= '</div>';
+        $html .= '<div style="background:#3a3a3c;border-radius:100px;height:7px;overflow:hidden;">';
+        $html .= '<div style="background:' . $color . ';height:100%;width:' . $pct . '%;border-radius:100px;transition:width .5s ease;min-width:' . ($pct > 0 ? '0' : '6px') . ';"></div>';
+        $html .= '</div>';
+        if ($current) {
+            $html .= '<div style="margin-top:6px;font-size:12px;color:#8e8e93;">Currently: <strong style="color:#e5e5ea;font-weight:500;">' . $current . '</strong></div>';
+        }
+        if (! empty($errors)) {
+            $html .= '<div style="margin-top:5px;font-size:11px;color:#ff6b6b;">⚠ ' . count($errors) . ' error(s)</div>';
+        }
+        $html .= '</div>';
+
+        return new HtmlString($html);
+    }
 
     public function form(Schema $schema): Schema
     {
@@ -41,62 +117,77 @@ class ManageProductGalleries extends ManageRelatedRecords
                 ->placeholder('Black, White Titanium, Desert Titanium…')
                 ->required()
                 ->maxLength(100)
-                ->live(onBlur: true)
-                ->afterStateUpdated(function (?string $state, callable $set, callable $get) {
-                    if (filled($state) && blank($get('pg_slug'))) {
-                        $set('pg_slug', Str::slug($state));
-                    }
-                })
                 ->columnSpanFull(),
 
-            TextInput::make('pg_slug')
-                ->label('Slug')
-                ->placeholder('auto-filled from name')
-                ->maxLength(100)
-                ->columnSpanFull(),
+            // pg_slug auto-generated via ProductGallery::booted() on create; preserved as-is on edit
+            Hidden::make('pg_slug'),
 
-            // ── Existing images (Edit only) ───────────────────────────────
-            Placeholder::make('existing_images')
-                ->label('Current images')
+            // ── Existing images: drag-to-sort + delete ────────────────────
+            Repeater::make('existing_media')
+                ->label(fn ($record) => $record
+                    ? 'Images (' . $record->media()->count() . ') — drag to sort, ✕ to remove'
+                    : 'Images')
                 ->columnSpanFull()
-                ->content(function ($record): HtmlString {
-                    if (! $record) return new HtmlString('');
-                    $media = $record->media()->orderBy('pm_position')->get();
-                    if ($media->isEmpty()) return new HtmlString('<p class="text-sm text-gray-400">No images yet</p>');
+                ->reorderable()
+                ->deletable()
+                ->addable(false)
+                ->schema([
+                    Placeholder::make('row')
+                        ->label('')
+                        ->columnSpanFull()
+                        ->content(function ($get): HtmlString {
+                            $src  = $get('pm_src') ?? '';
+                            $ext  = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+                            $name = basename(parse_url($src, PHP_URL_PATH));
 
-                    $html = '<div class="grid grid-cols-4 gap-2">';
-                    foreach ($media as $item) {
-                        $ext = strtolower(pathinfo($item->pm_src, PATHINFO_EXTENSION));
-                        if (in_array($ext, ['mp4', 'mov', 'webm'])) {
-                            $html .= '<div class="relative rounded overflow-hidden border border-gray-200 aspect-square flex items-center justify-center bg-gray-900">'
-                                . '<span class="text-white text-xs">▶ video</span>'
-                                . '</div>';
-                        } else {
-                            $html .= '<div class="relative rounded overflow-hidden border border-gray-200">'
-                                . '<img src="' . e($item->pm_src) . '" class="w-full aspect-square object-cover" loading="lazy" />'
-                                . '<span class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">' . e($item->pm_alt ?: basename($item->pm_src)) . '</span>'
-                                . '</div>';
-                        }
-                    }
-                    $html .= '</div>';
-                    $html .= '<p class="text-xs text-gray-400 mt-2">' . $media->count() . ' items total — ลบรายการได้ที่ปุ่ม action ใต้แต่ละรูป (coming soon)</p>';
-                    return new HtmlString($html);
+                            $isVideo = in_array($ext, ['mp4', 'mov', 'webm']);
+                            $thumb   = $isVideo
+                                ? '<div style="width:60px;height:60px;background:#1f2937;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;">▶</div>'
+                                : '<div class="gt" style="position:relative;flex-shrink:0;">
+                                    <img class="t" src="' . e($src) . '" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:8px;cursor:zoom-in;"/>
+                                    <img class="z" src="' . e($src) . '" loading="lazy" style="display:none;position:absolute;top:0;left:66px;z-index:9999;width:260px;height:260px;object-fit:contain;background:#111;border:1px solid #374151;border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.9);"/>
+                                   </div>';
+
+                            $badge = $isVideo
+                                ? ' <span style="font-size:10px;background:#374151;color:#9ca3af;padding:1px 5px;border-radius:4px;vertical-align:middle;">VIDEO</span>'
+                                : '';
+
+                            return new HtmlString('
+<style>.gt:hover .t{opacity:.75;}.gt:hover .z{display:block!important;}</style>
+<div style="display:flex;align-items:center;gap:12px;padding:4px 0;">
+  ' . $thumb . '
+  <div style="flex:1;min-width:0;font-size:13px;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' . e($src) . '">' . e($name) . $badge . '</div>
+</div>');
+                        }),
+                    Hidden::make('pm_id'),
+                    Hidden::make('pm_position'),
+                    Hidden::make('pm_src'),
+                    Hidden::make('pm_alt'),
+                ])
+                ->afterStateHydrated(function ($component, $record) {
+                    if (! $record) { $component->state([]); return; }
+                    $items = $record->media()->orderBy('pm_position')->get()
+                        ->map(fn ($m) => [
+                            'pm_id'       => $m->pm_id,
+                            'pm_src'      => $m->pm_src,
+                            'pm_alt'      => $m->pm_alt,
+                            'pm_position' => $m->pm_position,
+                        ])
+                        ->toArray();
+                    $component->state($items);
                 })
                 ->visible(fn ($record) => $record !== null),
 
-            // ── Multi-file drop zone ──────────────────────────────────────
+            // ── Upload new images ─────────────────────────────────────────
             FileUpload::make('gallery_images')
-                ->label(fn ($record) => $record ? 'Add more images / videos' : 'Images / Videos')
-                ->helperText('Drag & drop หรือคลิกเพื่อเลือกหลายไฟล์พร้อมกัน — รองรับ JPG, PNG, WebP, AVIF, MP4')
+                ->label(fn ($record) => $record ? 'Add images / videos' : 'Images / Videos')
+                ->helperText('JPG · PNG · WebP · AVIF · MP4 — สูงสุด 50 ไฟล์, 50MB/ไฟล์')
                 ->disk('public')
                 ->directory('products/galleries')
                 ->multiple()
-                ->reorderable()
-                ->image()
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'])
                 ->maxSize(51200)
                 ->maxFiles(50)
-                ->imagePreviewHeight('100')
                 ->panelLayout('grid')
                 ->columnSpanFull(),
         ]);
@@ -106,134 +197,39 @@ class ManageProductGalleries extends ManageRelatedRecords
     {
         return [
             Action::make('scrape_istudio')
-                ->label('Scrape from istudio.store')
+                ->label('Scrape all colors')
                 ->icon(Heroicon::ArrowDownTray)
-                ->color('gray')
+                ->color('warning')
                 ->requiresConfirmation()
-                ->modalHeading('Scrape gallery images from istudio.store')
-                ->modalDescription('ดึงรูปจาก istudio.store/{pv_handle}.json → download เก็บ local storage → สร้าง/อัปเดต gallery + media records')
+                ->modalHeading('Scrape galleries for all colors')
+                ->modalDescription('ดาวน์โหลดรูปทุกสีใน background (สูงสุด 5 นาที) — try istudio.store → istudiobyspvi.com fallback — ProgressBar จะแสดงขณะทำงาน')
                 ->action(function () {
-                    try {
-                        /** @var \App\Models\Product $product */
-                        $product = $this->getOwnerRecord();
+                    $product = $this->getOwnerRecord();
+                    if (! $product) { Notification::make()->title('Product not found')->danger()->send(); return; }
+                    $product->loadMissing('variants');
+                    if ($product->variants->isEmpty()) { Notification::make()->title('No variants found')->warning()->send(); return; }
 
-                        if (! $product) {
-                            Notification::make()->title('Error: product not found')->danger()->send();
-                            return;
-                        }
+                    $colorCount = $product->variants->whereNotNull('pv_option1')->unique('pv_option1')->count();
 
-                        $product->loadMissing('variants');
+                    // Init cache progress before dispatching
+                    Cache::put("scrape_gallery_{$product->pd_id}", [
+                        'status' => 'processing', 'total' => $colorCount,
+                        'done' => 0, 'images' => 0, 'current' => 'กำลังเริ่ม…', 'errors' => [],
+                    ], now()->addMinutes(10));
 
-                        if ($product->variants->isEmpty()) {
-                            Notification::make()->title('No variants found — cannot scrape')->warning()->send();
-                            return;
-                        }
+                    ScrapeGalleryJob::dispatch($product->pd_id);
+                    $this->scrapeProgress = Cache::get("scrape_gallery_{$product->pd_id}");
 
-                        $results = $this->scrapeIstudioGalleries($product);
-
-                        if ($results['galleries'] === 0) {
-                            Notification::make()
-                                ->title('Scrape complete — 0 galleries found (variants may not have pv_handle or istudio.store returned no images)')
-                                ->warning()
-                                ->send();
-                        } else {
-                            Notification::make()
-                                ->title("Scraped {$results['galleries']} galleries, {$results['images']} images — stored locally")
-                                ->success()
-                                ->send();
-                        }
-                    } catch (\Throwable $e) {
-                        Notification::make()
-                            ->title('Scrape failed: ' . $e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
+                    Notification::make()->title("Started — {$colorCount} colors queued for scraping")->success()->send();
                 }),
         ];
     }
 
-    // ── Scraper ──────────────────────────────────────────────────────────
-
-    private function scrapeIstudioGalleries(\App\Models\Product $product): array
-    {
-        $totalGalleries = 0;
-        $totalImages    = 0;
-        $seenColors     = [];
-
-        foreach ($product->variants as $variant) {
-            if (! $variant->pv_handle || ! $variant->pv_option1) continue;
-
-            $colorName = $variant->pv_option1;
-            if (isset($seenColors[$colorName])) continue;
-            $seenColors[$colorName] = true;
-
-            // Fetch product JSON from istudio.store
-            $url  = "https://www.istudio.store/products/{$variant->pv_handle}.json";
-            $json = @file_get_contents($url, false, stream_context_create([
-                'http' => ['timeout' => 8, 'header' => "User-Agent: Mozilla/5.0\r\n"],
-            ]));
-            if (! $json) continue;
-
-            $data = json_decode($json, true);
-            $shopifyImages = $data['product']['images'] ?? [];
-            if (empty($shopifyImages)) continue;
-
-            // Find or create gallery for this color
-            $gallerySlug = \Illuminate\Support\Str::slug($colorName)
-                ?: 'color-' . substr(md5($colorName), 0, 8);
-
-            $gallery = ProductGallery::firstOrCreate(
-                ['pd_id' => $product->pd_id, 'pg_slug' => $gallerySlug],
-                ['pg_name' => $colorName, 'pg_position' => 0]
-            );
-            $totalGalleries++;
-
-            // Delete existing images for this gallery (fresh scrape)
-            ProductMedia::where('pd_id', $product->pd_id)
-                ->where('pg_id', $gallery->pg_id)
-                ->whereIn('pm_type', ['image', 'video'])
-                ->delete();
-
-            // Download + store each image
-            $position = 1;
-            $dir = "products/{$product->pd_handle}/{$gallerySlug}";
-            foreach ($shopifyImages as $img) {
-                $srcUrl = $img['src'] ?? '';
-                if (! $srcUrl) continue;
-
-                // Download image
-                $contents = @file_get_contents($srcUrl, false, stream_context_create([
-                    'http' => ['timeout' => 10, 'header' => "User-Agent: Mozilla/5.0\r\n"],
-                ]));
-                if (! $contents) continue;
-
-                $ext      = pathinfo(parse_url($srcUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                $filename = sprintf('%s/%03d.%s', $dir, $position, $ext);
-                Storage::disk('public')->put($filename, $contents);
-
-                $localUrl = Storage::disk('public')->url($filename);
-
-                ProductMedia::create([
-                    'pd_id'       => $product->pd_id,
-                    'pg_id'       => $gallery->pg_id,
-                    'pm_src'      => $localUrl,
-                    'pm_type'     => 'image',
-                    'pm_position' => $position,
-                    'pm_alt'      => $colorName,
-                ]);
-
-                $position++;
-                $totalImages++;
-            }
-        }
-
-        return ['galleries' => $totalGalleries, 'images' => $totalImages];
-    }
 
     protected function handleRecordCreation(array $data): Model
     {
-        $images = $data['gallery_images'] ?? [];
-        unset($data['gallery_images']);
+        $images = array_values($data['gallery_images'] ?? []);
+        unset($data['gallery_images'], $data['existing_media']);
 
         /** @var ProductGallery $gallery */
         $gallery = $this->getOwnerRecord()->galleries()->create($data);
@@ -256,11 +252,31 @@ class ManageProductGalleries extends ManageRelatedRecords
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        $images = $data['gallery_images'] ?? [];
-        unset($data['gallery_images']);
+        $images      = $data['gallery_images'] ?? [];
+        $mediaItems  = $data['existing_media'] ?? null; // from Repeater
+        unset($data['gallery_images'], $data['existing_media']);
 
         $record->update($data);
 
+        // Process existing media: delete removed items + update positions + alt
+        if ($mediaItems !== null) {
+            $keptIds = collect($mediaItems)->pluck('pm_id')->filter()->values()->toArray();
+            // Only delete if we have explicit IDs to keep — guard against empty array deleting all
+            if (! empty($keptIds)) {
+                ProductMedia::where('pg_id', $record->pg_id)->whereNotIn('pm_id', $keptIds)->delete();
+            }
+            // Update position + alt for remaining items
+            foreach ($mediaItems as $position => $item) {
+                if (! empty($item['pm_id'])) {
+                    ProductMedia::where('pm_id', $item['pm_id'])->update([
+                        'pm_position' => $position + 1,
+                        'pm_alt'      => $item['pm_alt'] ?? $record->pg_name,
+                    ]);
+                }
+            }
+        }
+
+        $images = array_values($images);
         if (! empty($images)) {
             $nextPosition = $record->media()->max('pm_position') + 1;
             foreach ($images as $i => $path) {
@@ -316,11 +332,42 @@ class ManageProductGalleries extends ManageRelatedRecords
                     ->sortable(),
             ])
             ->defaultSort('pg_position')
+            ->description(function (): HtmlString {
+                $this->refreshScrapeProgress(); // reads fresh data from Cache every render cycle
+                return $this->scrapeProgress ? $this->scrapeProgressHtml() : new HtmlString('');
+            })
             ->headerActions([
-                CreateAction::make()->label('+ New gallery')->modalWidth('2xl'),
+                CreateAction::make()
+                    ->label('+ New gallery')
+                    ->modalWidth('2xl')
+                    ->using(fn (array $data) => $this->handleRecordCreation($data)),
             ])
             ->recordActions([
-                EditAction::make()->modalWidth('2xl'),
+                EditAction::make()
+                    ->modalWidth('2xl')
+                    ->using(fn (Model $record, array $data) => $this->handleRecordUpdate($record, $data)),
+
+                \Filament\Actions\Action::make('scrape_one')
+                    ->label('Scrape')
+                    ->icon(Heroicon::ArrowDownTray)
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (ProductGallery $record) => "Scrape '{$record->pg_name}'")
+                    ->modalDescription('ดาวน์โหลดรูปใน background — progress bar จะปรากฏขณะทำงาน')
+                    ->action(function (ProductGallery $record) {
+                        $product = $this->getOwnerRecord();
+
+                        Cache::put("scrape_gallery_{$product->pd_id}", [
+                            'status' => 'processing', 'total' => 1, 'done' => 0,
+                            'images' => 0, 'current' => $record->pg_name, 'errors' => [],
+                        ], now()->addMinutes(10));
+
+                        ScrapeGalleryJob::dispatch($product->pd_id, $record->pg_id);
+                        $this->scrapeProgress = Cache::get("scrape_gallery_{$product->pd_id}");
+
+                        Notification::make()->title("Queued — scraping '{$record->pg_name}'")->success()->send();
+                    }),
+
                 DeleteAction::make()
                     ->before(function (ProductGallery $record) {
                         $record->variants()->update(['pg_id' => null]);

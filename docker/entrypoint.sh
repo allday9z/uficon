@@ -7,11 +7,17 @@ mkdir -p storage/logs \
          storage/framework/sessions \
          storage/framework/views \
          storage/framework/cache \
-         bootstrap/cache
+         bootstrap/cache \
+         storage/app/public/products/galleries \
+         storage/app/public/lob/stripe-thumbnails \
+         storage/app/public/products
 chown -R www-data:www-data storage bootstrap/cache
 
 # Clear any stale cached config before re-caching (prevents false realpath issue)
 php artisan config:clear 2>/dev/null || true
+
+# Storage symlink (public/storage → storage/app/public)
+php artisan storage:link --force 2>/dev/null || true
 
 # Run DB migrations
 php artisan migrate --force
