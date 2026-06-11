@@ -70,8 +70,13 @@ COPY --from=node-builder /app/public/build ./public/build
 
 # Storage & cache dirs
 RUN mkdir -p storage/logs storage/framework/{sessions,views,cache} bootstrap/cache \
+        storage/app/public/products/galleries \
+        storage/app/public/lob/stripe-thumbnails \
     && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 storage bootstrap/cache
+
+# Persistent volume — mounted by Coolify at runtime
+VOLUME ["/var/www/html/storage/app/public"]
 
 # Configs
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
